@@ -87,7 +87,7 @@ void lcd_init() {
                                             }};
   display                                = lvgl_port_add_disp(&disp_cfg);
 
-  lv_disp_set_rotation(display, LV_DISP_ROT_180);
+  lv_disp_set_rotation(display, LV_DISP_ROT_NONE);
 }
 
 void lcd_settext(const char* pText) {
@@ -118,6 +118,20 @@ void lcd_settext2(const uint16_t counter) {
   }
 }
 
+void lcd_settext3(const uint16_t counter) {
+  static lv_obj_t* label = NULL;
+  if (lvgl_port_lock(0)) {
+    lv_obj_t* scr = lv_disp_get_scr_act(display);
+    if (NULL == label)
+      label = lv_label_create(scr);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_label_set_text_fmt(label, "Tx: %d", counter);
+    lv_obj_set_width(label, display->driver->hor_res);
+    lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 24);
+    lvgl_port_unlock();
+  }
+}
+
 void lra_init() {
   if (lora_init() == 0) {
     ESP_LOGE(TAG, "LoRa module not found!");
@@ -126,9 +140,9 @@ void lra_init() {
   lora_set_frequency(866e6); // 866MHz
   lora_enable_crc();
 
-  int cr = 1; // Coding Rate
-  int bw = 7; // Bandwith
-  int sf = 7; // Spreadong Factor
+  int cr = 5; // Coding Rate 4:5
+  int bw = 7; // Bandwidth 125kHz
+  int sf = 7; // Spreading Factor
 
   lora_set_coding_rate(cr);
   lora_set_bandwidth(bw);
@@ -146,12 +160,28 @@ void lra_rx(void* pvParameters) {
     lora_receive();
     if (lora_received()) {
       int rxLen = lora_receive_packet(buf, sizeof(buf));
-      ESP_LOGI(TAG, "%d byte packet received:[%.*s]", rxLen, rxLen, buf);
+      ESP_LOGI(TAG, "%d byte packet received:", rxLen);
+      ESP_LOG_BUFFER_HEXDUMP(TAG, buf, rxLen, ESP_LOG_INFO);
       rxcnt++;
 
       lcd_settext2(rxcnt);
     }
     vTaskDelay(1);
+  }
+}
+
+void lra_tx(void* pvParameters) {
+  const unsigned char buf[] = "PingPongPeng!";
+  uint16_t txcnt            = 0;
+
+  lcd_settext3(txcnt);
+
+  lora_set_tx_power(2);
+
+  while (1) {
+    lora_send_packet(&buf[0], 13);
+    lcd_settext3(++txcnt);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
 
@@ -222,7 +252,8 @@ void app_main(void) {
 
   lcd_settext("Booted!");
 
-  xTaskCreate(&lra_rx, "RX", 1024 * 3, NULL, 5, NULL);
+  // xTaskCreate(&lra_rx, "RX", 1024 * 3, NULL, 5, NULL);
+  xTaskCreate(&lra_tx, "TX", 1024 * 3, NULL, 5, NULL);
 
   while (1) {
     vTaskDelay(100);

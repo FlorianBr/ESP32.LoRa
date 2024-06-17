@@ -13,4 +13,4 @@ Software used:
 
 ## Simple Receiver
 
-A first test for the LilyGo module. Simply receives stuff and prints out some info on the console and in the LCD. Also used for testing the pinning because the LilyGo pinout is wrong. But the schematic is correct at least
+A first test for the LilyGo module. Simply receives stuff and prints out some info on the console and in the LCD. Also used for testing the pinning because the LilyGo pinout is wrong. But the schematic is correct at least.

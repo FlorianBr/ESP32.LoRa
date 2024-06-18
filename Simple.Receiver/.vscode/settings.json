@@ -1,4 +1,0 @@
-{
-    "idf.port": "/dev/ttyACM0",
-    "idf.adapterTargetName": "esp32"
-}

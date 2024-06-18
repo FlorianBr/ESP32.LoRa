@@ -1,0 +1,10 @@
+@startuml
+
+() "Broker"
+[Master] as "ESP32 LoRa32 Master"
+[Slave] as "ESP32 Wireless Paper"
+
+Broker .. Master : MQTT
+Master .. "0..n" Slave : LoRa
+
+@enduml

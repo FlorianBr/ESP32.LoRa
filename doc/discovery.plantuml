@@ -1,0 +1,23 @@
+@startuml
+
+control "ESP32 LoRa32 Master" as Master
+entity "ESP32 Wireless Paper 1" as Slave1
+entity "ESP32 Wireless Paper 2" as Slave2
+
+!pragma teoz true
+Master->Slave1: Lifesign Req
+activate Slave1
+& Master->Slave2: Lifesign Req
+activate Slave2
+
+note over Slave1: Random Delay
+note over Slave2: Random Delay
+
+Slave1->Master: Lifesign
+deactivate Slave1
+
+
+Slave2->Master: Lifesign
+deactivate Slave2
+
+@enduml

@@ -26,9 +26,9 @@
 
 /* Private define ------------------------------------------------------------*/
 
-#define LIFESIGN_CYCLE 10000 // [ms] Cycle time for lifesign request broadcasts
-#define MAX_FRAME_SIZE 512   // Max. Size of frame we can handle
-#define SEMA_TIMEOUT 1000    // [ms] Timeout when waiting for semaphores
+#define LIFESIGN_CYCLE (60 * 1000) // [ms] Cycle time for lifesign request broadcasts
+#define MAX_FRAME_SIZE 512         // Max. Size of frame we can handle
+#define SEMA_TIMEOUT 1000          // [ms] Timeout when waiting for semaphores
 
 /* Private macro -------------------------------------------------------------*/
 
@@ -174,8 +174,6 @@ void app_main(void) {
   lcd_init();
   lcd_settext1("Starting");
   com_init();
-
-  esp_log_level_set("COM", ESP_LOG_DEBUG);
 
   vSemaphoreCreateBinary(xSemaCom);
   configASSERT(xSemaCom);

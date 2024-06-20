@@ -79,6 +79,7 @@ More info about the communication protocol [here](doc/protocol.md)
 - [ ] Master: LCD show WiFi connectivity
 - [ ] Master: LCD show MQTT connectivity
 - [ ] Master: LCD show number of known devices
+- [ ] Master: OTA Update
 - [X] Slave: Generic RX for testing
 - [X] Slave: Generic TX for testing
 - [X] Slave: Lifesign on start
@@ -87,3 +88,4 @@ More info about the communication protocol [here](doc/protocol.md)
 - [ ] Slave: Write endpoint functionality
 - [ ] Slave: Display driver
 - [ ] Slave: Display endpoint
+- [ ] Slave: OTA Update

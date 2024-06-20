@@ -25,8 +25,8 @@ typedef struct {
 
 /* Private define ------------------------------------------------------------*/
 
-#define MAX_DEVICELIST 20           // Max. number of devices in the list
-#define DEV_FORGET_TIME (60 * 1000) // [ms] Time after devices are forgotten
+#define MAX_DEVICELIST 20               // Max. number of devices in the list
+#define DEV_FORGET_TIME (5 * 60 * 1000) // [ms] Time after devices are forgotten
 
 /* Private macro -------------------------------------------------------------*/
 

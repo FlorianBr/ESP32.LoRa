@@ -73,59 +73,60 @@ void com_init() {
 }
 
 bool com_checkHeader(const lora_frameheader_t* pHeader) {
+  ESP_LOGD(TAG, "Checking Header");
+
   if (pHeader->version != FRAME_VERSION) {
     ESP_LOGW(TAG, "Wrong header version");
     return false;
   }
   switch (pHeader->ftype) {
     case TYPE_ID_REQ:
-      ESP_LOGD(TAG, " Frame Type = %d (Request)", pHeader->ftype);
+      ESP_LOGD(TAG, "   Frame Type = %d (Request)", pHeader->ftype);
       break;
     case TYPE_ID_RES:
-      ESP_LOGD(TAG, " Frame Type = %d (Response)", pHeader->ftype);
+      ESP_LOGD(TAG, "   Frame Type = %d (Response)", pHeader->ftype);
       break;
     case TYPE_ID_BCAST:
-      ESP_LOGD(TAG, " Frame Type = %d (Broadcast)", pHeader->ftype);
+      ESP_LOGD(TAG, "   Frame Type = %d (Broadcast)", pHeader->ftype);
       break;
     default:
-      ESP_LOGW(TAG, " Frame Type = %d (Unknown)", pHeader->ftype);
+      ESP_LOGW(TAG, "   Frame Type = %d (Unknown)", pHeader->ftype);
       return false;
       break;
   }
 
   switch (pHeader->dtype) {
     case DEV_TYPE_GATEWAY:
-      ESP_LOGD(TAG, "Device Type = %d (Gateway)", pHeader->dtype);
+      ESP_LOGD(TAG, "  Device Type = %d (Gateway)", pHeader->dtype);
       break;
     case DEV_TYPE_ENDDEV:
-      ESP_LOGD(TAG, "Device Type = %d (End Device)", pHeader->dtype);
+      ESP_LOGD(TAG, "  Device Type = %d (End Device)", pHeader->dtype);
       break;
     default:
-      ESP_LOGW(TAG, "Device Type = %d (Unknown)", pHeader->dtype);
+      ESP_LOGW(TAG, "  Device Type = %d (Unknown)", pHeader->dtype);
       return false;
       break;
   }
 
   switch (pHeader->cmd) {
     case DEV_CMD_LIFESIGN:
-      ESP_LOGD(TAG, "    Command = %d (Lifesign)", pHeader->cmd);
+      ESP_LOGD(TAG, "      Command = %d (Lifesign)", pHeader->cmd);
       break;
     case DEV_CMD_RDATA:
-      ESP_LOGD(TAG, "    Command = %d (Read Data)", pHeader->cmd);
+      ESP_LOGD(TAG, "      Command = %d (Read Data)", pHeader->cmd);
       break;
     case DEV_CMD_WDATA:
-      ESP_LOGD(TAG, "    Command = %d (Write Data)", pHeader->cmd);
+      ESP_LOGD(TAG, "      Command = %d (Write Data)", pHeader->cmd);
       break;
     default:
-      ESP_LOGW(TAG, "    Command = %d (Unknown)", pHeader->cmd);
+      ESP_LOGW(TAG, "      Command = %d (Unknown)", pHeader->cmd);
       return false;
       break;
   }
-
-  ESP_LOGD(TAG, " Payloadlen = %d", pHeader->payloadlen);
+  ESP_LOGD(TAG, "   Payloadlen = %d", pHeader->payloadlen);
 
   // TODO: Check CRC
-  ESP_LOGD(TAG, " Header CRC = %d", pHeader->crc);
+  ESP_LOGD(TAG, "   Header CRC = %d", pHeader->crc);
 
   return true;
 }
@@ -145,10 +146,10 @@ bool com_parse_msg_lifesign(const lora_id_response_t* res, com_devicedata_t* pDv
 
   // TODO: Check CRC
 
-  ESP_LOGD(TAG, "   Device ID: %llx", res->id);
-  ESP_LOGD(TAG, "   Device Type: %x", res->devtype);
-  ESP_LOGD(TAG, "   Device Version: %d.%d", res->vmajor, res->vminor);
-  ESP_LOGD(TAG, "   Device Uptime: %ld", res->uptime);
+  ESP_LOGD(TAG, "        ID = %llx", res->id);
+  ESP_LOGD(TAG, "      Type = %x", res->devtype);
+  ESP_LOGD(TAG, "   Version = %d.%d", res->vmajor, res->vminor);
+  ESP_LOGD(TAG, "    Uptime = %ld", res->uptime);
 
   pDvData->id     = res->id;
   pDvData->type   = res->devtype;

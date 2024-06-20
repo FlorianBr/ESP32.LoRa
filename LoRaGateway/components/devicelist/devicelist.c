@@ -84,20 +84,18 @@ void worker(void* pvParameters) {
 bool devlist_adddevice(const uint64_t id) {
   size_t dlpos      = MAX_DEVICELIST;
   size_t dlfirstpos = MAX_DEVICELIST;
-
-  ESP_LOGI(TAG, "Adding/Updating Device %llx", id);
+  bool newDevice    = true;
 
   // Already in the devicelist?
   for (size_t i = 0; i < MAX_DEVICELIST; i++) {
     // Check if already known
     if (devicelist[i].id == id) {
-      ESP_LOGI(TAG, "   Device known in list at pos %d", i);
-      dlpos = i;
+      dlpos     = i;
+      newDevice = false;
       break;
     }
     // Remember first unused entry
     if ((!devicelist[i].isAlive) && (i < dlfirstpos)) {
-      ESP_LOGI(TAG, "   First unused pos in list is %d", i);
       dlfirstpos = i;
     }
   }
@@ -105,7 +103,7 @@ bool devlist_adddevice(const uint64_t id) {
     if (dlfirstpos < MAX_DEVICELIST) { // and unused position?
       dlpos = dlfirstpos;
     } else {
-      ESP_LOGW(TAG, "Unable to add device, list is full!");
+      ESP_LOGW(TAG, "Unable to add device %llx, list is full!", id);
       return false;
     }
   }
@@ -114,7 +112,7 @@ bool devlist_adddevice(const uint64_t id) {
   devicelist[dlpos].id        = id;
   devicelist[dlpos].isAlive   = true;
   devicelist[dlpos].timestamp = xTaskGetTickCount();
-  ESP_LOGI(TAG, "   Device added/updated at pos %d", dlpos);
+  ESP_LOGI(TAG, "Device %llx %s at pos %d", id, (newDevice ? "added" : "updated"), dlpos);
 
   return true;
 }

@@ -95,8 +95,8 @@ void rx_worker(void* pvParameters) {
 
 // Handle TX
 void tx_worker(void* pvParameters) {
+  vTaskDelay(pdMS_TO_TICKS(1000)); // 1s start-up delay
   while (true) {
-    vTaskDelay(pdMS_TO_TICKS(LIFESIGN_CYCLE));
     ESP_LOGI(TAG, "Sending lifesign");
 
     com_waitabort();
@@ -106,6 +106,8 @@ void tx_worker(void* pvParameters) {
     } else {
       ESP_LOGW(TAG, "Unable to get semaphore!");
     }
+
+    vTaskDelay(pdMS_TO_TICKS(LIFESIGN_CYCLE));
   }
 }
 

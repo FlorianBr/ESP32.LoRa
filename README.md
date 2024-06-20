@@ -69,10 +69,11 @@ More info about the communication protocol [here](doc/protocol.md)
 - [X] Master: Detections of lifesigns
 - [X] Master: Keep list of detected devices
 - [X] Master: Remove detected devices on timeouts
-- [ ] Master: WiFi
-- [ ] Master: MQTT connectivity
-- [ ] Master: MQTT list of known devices
-- [ ] Master: MQTT device tree with status
+- [X] Master: WiFi
+- [X] Master: MQTT connectivity
+- [X] Master: MQTT list of known devices
+- [X] Master: MQTT device tree with status
+- [ ] Master: NTP Time for all MQTT timestamps
 - [ ] Master: MQTT Read device endpoints
 - [ ] Master: MQTT Write device endpoints
 - [ ] Master: LCD functionality

@@ -1,13 +1,14 @@
 /**
  ******************************************************************************
- *  file           : devicelist.h
- *  brief          : Device list management
+ *  file           : wifi.h
+ *  brief          : WiFi Functions
  ******************************************************************************
- *  Copyright (C) 2024 Florian Brandner
  */
 
-#ifndef DEVICELIST_H_
-#define DEVICELIST_H_
+#ifndef _WIFI_H_
+#define _WIFI_H_
+
+#include "esp_wifi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -16,7 +17,6 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 
 /* Private includes ----------------------------------------------------------*/
-#include <stdint.h>
 
 /* Exported types ------------------------------------------------------------*/
 
@@ -27,37 +27,28 @@ extern "C" {
 /* Exported functions prototypes ---------------------------------------------*/
 
 /**
- * @brief Add/Update a device in the list
+ * @brief Init WiFi in station mode
  *
- * @param id The devices ID
- * @return true if added, false on error
+ * @return esp_err_t
  */
-bool devlist_adddevice(const uint64_t id);
+esp_err_t WiFi_Init(void);
 
 /**
- * @brief Init the device list module
+ * @brief Get the network interface
  *
+ * @return esp_netif_t*
  */
-void devlist_init();
+esp_netif_t* WiFi_GetNetIf();
 
 /**
- * @brief Returns the list of known devices
+ * @brief Check if WiFi is connected
  *
- * @return uint8_t
+ * @return true if connected, false otherwise
  */
-uint8_t devlist_known();
-
-/**
- * @brief Gets the ID of a specific entry
- *
- * @param entry Number of the entry
- * @param Id The devices ID
- * @return true if valid, false otherwise
- */
-bool devlist_getEntryId(const uint8_t entry, uint64_t* Id);
+bool WiFi_isConnected();
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // DEVICELIST_H_
+#endif // _WIFI_H_

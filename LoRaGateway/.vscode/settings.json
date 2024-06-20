@@ -11,6 +11,8 @@
         "lcd.h": "c",
         "com.h": "c",
         "text_encoding": "c",
-        "thread": "c"
+        "thread": "c",
+        "string.h": "c",
+        "system_error": "c"
     }
 }

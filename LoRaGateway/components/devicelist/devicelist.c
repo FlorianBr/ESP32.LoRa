@@ -42,6 +42,9 @@ static const char* TAG = "DLST";
 void worker(void* pvParameters);
 void clearEntry(size_t entry);
 
+int dlCompare(const void* a, const void* b) {
+  return (((devicelist_entry_t*)b)->id - ((devicelist_entry_t*)a)->id);
+}
 /* Private user code ---------------------------------------------------------*/
 
 // Sets a entry to defaults
@@ -64,8 +67,9 @@ void worker(void* pvParameters) {
         ESP_LOGI(TAG, "Forgetting device %d with ID %llx", i, devicelist[i].id);
         clearEntry(i);
       }
-      // Number of known devices
     }
+
+    qsort(devicelist, MAX_DEVICELIST, sizeof(devicelist_entry_t), dlCompare);
 
     // Display list of devices
     ESP_LOGI(TAG, "Known Devices:%d", devlist_known());
@@ -112,7 +116,9 @@ bool devlist_adddevice(const uint64_t id) {
   devicelist[dlpos].id        = id;
   devicelist[dlpos].isAlive   = true;
   devicelist[dlpos].timestamp = xTaskGetTickCount();
-  ESP_LOGI(TAG, "Device %llx %s at pos %d", id, (newDevice ? "added" : "updated"), dlpos);
+  ESP_LOGI(TAG, "Device %llx %s", id, (newDevice ? "added" : "updated"));
+
+  qsort(devicelist, MAX_DEVICELIST, sizeof(devicelist_entry_t), dlCompare);
 
   return true;
 }
@@ -136,4 +142,14 @@ uint8_t devlist_known() {
     }
   }
   return known;
+}
+
+bool devlist_getEntryId(const uint8_t entry, uint64_t* Id) {
+  if (entry < MAX_DEVICELIST) {
+    if (devicelist[entry].isAlive) {
+      *Id = devicelist[entry].id;
+      return true;
+    }
+  }
+  return false;
 }

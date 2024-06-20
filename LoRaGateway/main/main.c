@@ -7,9 +7,11 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
+#include <cJSON.h>
 #include <stdio.h>
 
 /* Private includes ----------------------------------------------------------*/
+
 #include "com.h"
 #include "devicelist.h"
 #include "esp_chip_info.h"
@@ -19,8 +21,10 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lcd.h"
+#include "mqtt.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
+#include "wifi.h"
 
 /* Private typedef -----------------------------------------------------------*/
 
@@ -29,6 +33,7 @@
 #define LIFESIGN_CYCLE (60 * 1000) // [ms] Cycle time for lifesign request broadcasts
 #define MAX_FRAME_SIZE 512         // Max. Size of frame we can handle
 #define SEMA_TIMEOUT 1000          // [ms] Timeout when waiting for semaphores
+#define STATUS_CYCLE (60 * 1000)   // [ms] Cycle time for status messages
 
 /* Private macro -------------------------------------------------------------*/
 
@@ -47,6 +52,8 @@ SemaphoreHandle_t xSemaCom = NULL; // Semaphore for communication resource
 
 void rx_worker(void* pvParameters);
 void tx_worker(void* pvParameters);
+void vTimerStatusMsg(TimerHandle_t xTimer);
+void sendDeviceMsg(com_devicedata_t* pDevice);
 
 /* Private user code ---------------------------------------------------------*/
 
@@ -71,7 +78,7 @@ void rx_worker(void* pvParameters) {
               com_devicedata_t DevData;
               if (com_parse_msg_lifesign((const lora_id_response_t*)Rxbuffer, &DevData)) {
                 if (devlist_adddevice(DevData.id)) {
-                  // TODO: Publish device data to MQTT
+                  sendDeviceMsg(&DevData);
                 }
               } else {
                 ESP_LOGW(TAG, "Unable to parse lifesign message");
@@ -108,6 +115,52 @@ void tx_worker(void* pvParameters) {
     }
 
     vTaskDelay(pdMS_TO_TICKS(LIFESIGN_CYCLE));
+  }
+}
+
+// Send cyclic status message
+void vTimerStatusMsg(TimerHandle_t xTimer) {
+  cJSON* message = cJSON_CreateObject();
+  if (NULL != message) {
+    char* string = NULL;
+    cJSON_AddNumberToObject(message, "Uptime", (xTaskGetTickCount() * configTICK_RATE_HZ) / 1000);
+    cJSON_AddNumberToObject(message, "NumDevices", devlist_known());
+
+    cJSON* devices = cJSON_CreateArray();
+    if (devices != NULL) {
+      cJSON_AddItemToObject(message, "devices", devices);
+      for (size_t i = 0; i < devlist_known(); i++) {
+        uint64_t Id = 0;
+        if (devlist_getEntryId(i, &Id)) {
+          cJSON* jsonId = cJSON_CreateNumber(Id);
+          cJSON_AddItemToArray(devices, jsonId);
+        }
+      }
+    }
+    string = cJSON_Print(message);
+    MQTT_Transmit("Status", string);
+    cJSON_Delete(message);
+  }
+}
+
+// Send device data to MQTT
+void sendDeviceMsg(com_devicedata_t* pDevice) {
+  cJSON* message = cJSON_CreateObject();
+  if (NULL != message) {
+    char* string = NULL;
+    char cBuffer[50];
+    char subtopic[128];
+
+    cJSON_AddNumberToObject(message, "Timestamp", (xTaskGetTickCount() * configTICK_RATE_HZ) / 1000);
+    cJSON_AddNumberToObject(message, "ID", pDevice->id);
+    cJSON_AddNumberToObject(message, "Type", pDevice->type);
+    cJSON_AddNumberToObject(message, "Uptime", pDevice->uptime);
+    snprintf(&cBuffer[0], 50, "%d.%d", pDevice->vmaj, pDevice->vmin);
+    cJSON_AddStringToObject(message, "Version", cBuffer);
+    snprintf(&subtopic[0], 128, "%lld/info", pDevice->id);
+    string = cJSON_Print(message);
+    MQTT_Transmit(subtopic, string);
+    cJSON_Delete(message);
   }
 }
 
@@ -173,9 +226,23 @@ void app_main(void) {
   nvs_release_iterator(iter);
   ESP_LOGW(TAG, "-------------------------------------");
 
+#if 0 // Set NVS values here
+  {
+    nvs_handle_t handle;
+    ESP_ERROR_CHECK(nvs_open("SETTINGS", NVS_READWRITE, &handle));
+    ESP_ERROR_CHECK(nvs_set_str(handle, "WIFI_SSID", "<SSID>"));
+    ESP_ERROR_CHECK(nvs_set_str(handle, "WIFI_PASS", "<Secret!>"));
+    ESP_ERROR_CHECK(nvs_set_str(handle, "MQTT_URL", "mqtt://<IP>>:1883"));
+    nvs_close(handle);
+  }
+#endif
+
   lcd_init();
   lcd_settext1("Starting");
   com_init();
+  WiFi_Init();
+  // TODO: If WiFi init failed, re-init in AP mode
+  MQTT_Init();
 
   vSemaphoreCreateBinary(xSemaCom);
   configASSERT(xSemaCom);
@@ -189,6 +256,11 @@ void app_main(void) {
   // Start the TX worker
   xTaskCreate(tx_worker, "TX", 4096, NULL, tskIDLE_PRIORITY, &xHdlTXWorker);
   configASSERT(xHdlTXWorker);
+
+  // Timer for cyclic messages
+  TimerHandle_t timerStatusMsg = xTimerCreate("StatusMsg", pdMS_TO_TICKS(STATUS_CYCLE), pdTRUE, NULL, vTimerStatusMsg);
+  configASSERT(timerStatusMsg);
+  configASSERT(xTimerStart(timerStatusMsg, 0));
 
   lcd_settext1("Running");
   while (1) {

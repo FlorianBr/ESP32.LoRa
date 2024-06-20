@@ -1,22 +1,22 @@
 /**
  ******************************************************************************
- *  file           : lcd.h
- *  brief          : The LCD
+ *  file           : devicelist.h
+ *  brief          : Device list management
  ******************************************************************************
  *  Copyright (C) 2024 Florian Brandner
  */
 
-#ifndef __LCD_H_
-#define __LCD_H_
+#ifndef DEVICELIST_H_
+#define DEVICELIST_H_
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
-#include <stdint.h>
 
 /* Private includes ----------------------------------------------------------*/
+#include <stdint.h>
 
 /* Exported types ------------------------------------------------------------*/
 
@@ -26,13 +26,29 @@ extern "C" {
 
 /* Exported functions prototypes ---------------------------------------------*/
 
-void lcd_init();
-void lcd_settext1(const char* pText);
-void lcd_settext2(const char* pText, const uint16_t counter);
-void lcd_settext3(const char* pText, const uint16_t counter);
+/**
+ * @brief Add/Update a device in the list
+ *
+ * @param id The devices ID
+ * @return true if added, false on error
+ */
+bool devlist_adddevice(const uint64_t id);
+
+/**
+ * @brief Init the device list module
+ *
+ */
+void devlist_init();
+
+/**
+ * @brief Returns the list of known devices
+ *
+ * @return uint8_t
+ */
+uint8_t devlist_known();
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // __LCD_H_
+#endif // DEVICELIST_H_

@@ -148,8 +148,10 @@ bool lora_tx_id_frame(const bool wasRequested) {
   framedata.header.payloadlen = sizeof(lora_id_response_t) - sizeof(lora_frameheader_t);
   framedata.header.crc        = 0xFF;
   framedata.id                = systemId;
+  framedata.devtype           = DEVTYPE_WPAPER;
   framedata.vmajor            = VERSION_MAJOR;
   framedata.vminor            = VERSION_MINOR;
+  framedata.uptime            = (xTaskGetTickCount() * configTICK_RATE_HZ) / 1000000;
   framedata.crc               = 0xFF;
 
   // Header CRC

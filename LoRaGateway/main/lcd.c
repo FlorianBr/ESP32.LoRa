@@ -39,7 +39,6 @@
 
 /* Private variables ---------------------------------------------------------*/
 
-static const char* TAG = "LCD";
 static lv_disp_t* display;
 
 /* Private function prototypes -----------------------------------------------*/
@@ -119,28 +118,28 @@ void lcd_settext1(const char* pText) {
   }
 }
 
-void lcd_settext2(const uint16_t counter) {
+void lcd_settext2(const char* pText, const uint16_t counter) {
   static lv_obj_t* label = NULL;
   if (lvgl_port_lock(0)) {
     lv_obj_t* scr = lv_disp_get_scr_act(display);
     if (NULL == label)
       label = lv_label_create(scr);
     lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_label_set_text_fmt(label, "Rx: %d", counter);
+    lv_label_set_text_fmt(label, "%s %d", pText, counter);
     lv_obj_set_width(label, display->driver->hor_res);
     lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 12);
     lvgl_port_unlock();
   }
 }
 
-void lcd_settext3(const uint16_t counter) {
+void lcd_settext3(const char* pText, const uint16_t counter) {
   static lv_obj_t* label = NULL;
   if (lvgl_port_lock(0)) {
     lv_obj_t* scr = lv_disp_get_scr_act(display);
     if (NULL == label)
       label = lv_label_create(scr);
     lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_label_set_text_fmt(label, "Tx: %d", counter);
+    lv_label_set_text_fmt(label, "%s %d", pText, counter);
     lv_obj_set_width(label, display->driver->hor_res);
     lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 24);
     lvgl_port_unlock();

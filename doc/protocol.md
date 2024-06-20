@@ -30,6 +30,6 @@ Commands:
 
 ### ID Response/Broadcast
 
-| Header  | System ID | Version Major | Version Minor | CRC    |
-|---------|-----------|---------------|---------------|--------|
-| 7 Byte  | 8 Byte    | 1 Byte        | 1 Byte        | 1 Byte |
+| Header  | System ID | Device Type | Version Major | Version Minor | Uptime    | CRC    |
+|---------|-----------|-------------|---------------|---------------|-----------|--------|
+| 7 Byte  | 8 Byte    | 2 Byte      | 1 Byte        | 1 Byte        | 4 Byte    | 1 Byte |

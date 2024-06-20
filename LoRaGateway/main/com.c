@@ -30,6 +30,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 static const char* TAG = "COM";
+static bool abort_wait = false;
 
 /* Private function prototypes -----------------------------------------------*/
 
@@ -78,13 +79,13 @@ bool com_checkHeader(const lora_frameheader_t* pHeader) {
   }
   switch (pHeader->ftype) {
     case TYPE_ID_REQ:
-      ESP_LOGI(TAG, " Frame Type = %d (Request)", pHeader->ftype);
+      ESP_LOGD(TAG, " Frame Type = %d (Request)", pHeader->ftype);
       break;
     case TYPE_ID_RES:
-      ESP_LOGI(TAG, " Frame Type = %d (Response)", pHeader->ftype);
+      ESP_LOGD(TAG, " Frame Type = %d (Response)", pHeader->ftype);
       break;
     case TYPE_ID_BCAST:
-      ESP_LOGI(TAG, " Frame Type = %d (Broadcast)", pHeader->ftype);
+      ESP_LOGD(TAG, " Frame Type = %d (Broadcast)", pHeader->ftype);
       break;
     default:
       ESP_LOGW(TAG, " Frame Type = %d (Unknown)", pHeader->ftype);
@@ -94,10 +95,10 @@ bool com_checkHeader(const lora_frameheader_t* pHeader) {
 
   switch (pHeader->dtype) {
     case DEV_TYPE_GATEWAY:
-      ESP_LOGI(TAG, "Device Type = %d (Gateway)", pHeader->dtype);
+      ESP_LOGD(TAG, "Device Type = %d (Gateway)", pHeader->dtype);
       break;
     case DEV_TYPE_ENDDEV:
-      ESP_LOGI(TAG, "Device Type = %d (End Device)", pHeader->dtype);
+      ESP_LOGD(TAG, "Device Type = %d (End Device)", pHeader->dtype);
       break;
     default:
       ESP_LOGW(TAG, "Device Type = %d (Unknown)", pHeader->dtype);
@@ -107,13 +108,13 @@ bool com_checkHeader(const lora_frameheader_t* pHeader) {
 
   switch (pHeader->cmd) {
     case DEV_CMD_LIFESIGN:
-      ESP_LOGI(TAG, "    Command = %d (Lifesign)", pHeader->cmd);
+      ESP_LOGD(TAG, "    Command = %d (Lifesign)", pHeader->cmd);
       break;
     case DEV_CMD_RDATA:
-      ESP_LOGI(TAG, "    Command = %d (Read Data)", pHeader->cmd);
+      ESP_LOGD(TAG, "    Command = %d (Read Data)", pHeader->cmd);
       break;
     case DEV_CMD_WDATA:
-      ESP_LOGI(TAG, "    Command = %d (Write Data)", pHeader->cmd);
+      ESP_LOGD(TAG, "    Command = %d (Write Data)", pHeader->cmd);
       break;
     default:
       ESP_LOGW(TAG, "    Command = %d (Unknown)", pHeader->cmd);
@@ -121,28 +122,40 @@ bool com_checkHeader(const lora_frameheader_t* pHeader) {
       break;
   }
 
-  ESP_LOGI(TAG, " Payloadlen = %d", pHeader->payloadlen);
+  ESP_LOGD(TAG, " Payloadlen = %d", pHeader->payloadlen);
 
   // TODO: Check CRC
-  ESP_LOGI(TAG, " Header CRC = %d", pHeader->crc);
+  ESP_LOGD(TAG, " Header CRC = %d", pHeader->crc);
 
   return true;
 }
 
-void com_parse_msg_lifesign(lora_id_response_t* res) {
-  ESP_LOGI(TAG, "LifeSign received!");
+bool com_parse_msg_lifesign(const lora_id_response_t* res, com_devicedata_t* pDvData) {
+  ESP_LOGD(TAG, "Parsing LifeSign");
+
+  if (pDvData == NULL) {
+    ESP_LOGW(TAG, "NULL pointer for device data!");
+    return false;
+  }
 
   if (res->header.payloadlen != (sizeof(lora_id_response_t) - sizeof(lora_frameheader_t))) {
     ESP_LOGW(TAG, "Illegal payload length %d", res->header.payloadlen);
-    return;
+    return false;
   }
 
   // TODO: Check CRC
 
-  ESP_LOGI(TAG, "   Device ID: %llx", res->id);
-  ESP_LOGI(TAG, "   Device Version: %d.%d", res->vmajor, res->vminor);
+  ESP_LOGD(TAG, "   Device ID: %llx", res->id);
+  ESP_LOGD(TAG, "   Device Type: %x", res->devtype);
+  ESP_LOGD(TAG, "   Device Version: %d.%d", res->vmajor, res->vminor);
+  ESP_LOGD(TAG, "   Device Uptime: %ld", res->uptime);
 
-  // TODO: Add device to list of known devices
+  pDvData->id     = res->id;
+  pDvData->type   = res->devtype;
+  pDvData->uptime = res->uptime;
+  pDvData->vmaj   = res->vmajor;
+  pDvData->vmin   = res->vminor;
+  return true;
 }
 
 bool com_tx_lifesign_req() {
@@ -160,27 +173,36 @@ bool com_tx_lifesign_req() {
   lora_set_tx_power(2);
   lora_send_packet((uint8_t*)&frame, sizeof(lora_frameheader_t));
 
-  ESP_LOGI(TAG, "Transmitted Lifesign Request, %d packets lost", lora_packet_lost());
+  ESP_LOGD(TAG, "Transmitted Lifesign Request, %d packets lost", lora_packet_lost());
 
   return true;
 }
 
-uint16_t com_wait4rx(uint32_t timeout, const uint8_t* buffer, const uint16_t maxsize) {
+uint16_t com_wait4rx(uint32_t timeout, uint8_t* buffer, const uint16_t maxsize) {
   const uint32_t aborttime = xTaskGetTickCount() + pdMS_TO_TICKS(timeout);
 
   lora_receive();
   while (lora_received() == 0) {
-    if (xTaskGetTickCount() >= aborttime) {
-      ESP_LOGI(TAG, "com_wait4rx: Timeout waiting for RX");
+    if ((timeout > 0) && (xTaskGetTickCount() >= aborttime)) {
+      ESP_LOGD(TAG, "com_wait4rx: Timeout waiting for RX");
       return 0;
     }
-    vTaskDelay(10); // Called from the main loop, a yield would trigger the WDT!
+    if (abort_wait) {
+      abort_wait = false;
+      ESP_LOGD(TAG, "com_wait4rx: Wait abort requested");
+      return 0;
+    }
+    vTaskDelay(10); // Called from the main loop, a yield would not trigger the WDT!
   }
 
   int rxLen = lora_receive_packet(buffer, maxsize);
 
-  ESP_LOGI(TAG, "com_wait4rx: %d bytes of data received", rxLen);
-  ESP_LOG_BUFFER_HEXDUMP(TAG, buffer, rxLen, ESP_LOG_INFO);
+  ESP_LOGD(TAG, "com_wait4rx: %d bytes of data received", rxLen);
+  ESP_LOG_BUFFER_HEXDUMP(TAG, buffer, rxLen, ESP_LOG_DEBUG);
 
   return rxLen;
+}
+
+void com_waitabort() {
+  abort_wait = true;
 }

@@ -9,6 +9,8 @@
         "stdio.h": "c",
         "cstdint": "c",
         "lcd.h": "c",
-        "com.h": "c"
+        "com.h": "c",
+        "text_encoding": "c",
+        "thread": "c"
     }
 }

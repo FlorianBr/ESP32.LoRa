@@ -11,6 +11,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 #include "com.h"
+#include "devicelist.h"
 #include "esp_chip_info.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
@@ -20,12 +21,14 @@
 #include "lcd.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
+
 /* Private typedef -----------------------------------------------------------*/
 
 /* Private define ------------------------------------------------------------*/
 
 #define LIFESIGN_CYCLE 10000 // [ms] Cycle time for lifesign request broadcasts
 #define MAX_FRAME_SIZE 512   // Max. Size of frame we can handle
+#define SEMA_TIMEOUT 1000    // [ms] Timeout when waiting for semaphores
 
 /* Private macro -------------------------------------------------------------*/
 
@@ -35,9 +38,76 @@ static const char* TAG = "MAIN";
 static esp_partition_t* part_info;
 static esp_ota_img_states_t ota_state;
 
+TaskHandle_t xHdlRXWorker = NULL;
+TaskHandle_t xHdlTXWorker = NULL;
+
+SemaphoreHandle_t xSemaCom = NULL; // Semaphore for communication resource
+
 /* Private function prototypes -----------------------------------------------*/
 
+void rx_worker(void* pvParameters);
+void tx_worker(void* pvParameters);
+
 /* Private user code ---------------------------------------------------------*/
+
+// Handle RX
+void rx_worker(void* pvParameters) {
+  uint8_t Rxbuffer[MAX_FRAME_SIZE];
+
+  while (true) {
+    if (xSemaphoreTake(xSemaCom, pdMS_TO_TICKS(SEMA_TIMEOUT)) == pdTRUE) {
+      const uint16_t rxlen = com_wait4rx(0, &Rxbuffer[0], MAX_FRAME_SIZE); // Wait for received data (BLOCKING!)
+      xSemaphoreGive(xSemaCom);
+
+      if (rxlen > 0) {
+        ESP_LOGI(TAG, "Received %d byte", rxlen);
+        if (rxlen < sizeof(lora_frameheader_t)) {
+          ESP_LOGW(TAG, "Received size too small");
+        } else {
+          const lora_frameheader_t* pHeader = (lora_frameheader_t*)&Rxbuffer;
+          if (com_checkHeader(pHeader)) {
+            if ((pHeader->ftype == TYPE_ID_RES) ||   // Lifesign response
+                (pHeader->ftype == TYPE_ID_BCAST)) { // Lifesign broadcast
+              com_devicedata_t DevData;
+              if (com_parse_msg_lifesign((const lora_id_response_t*)Rxbuffer, &DevData)) {
+                if (devlist_adddevice(DevData.id)) {
+                  // TODO: Publish device data to MQTT
+                }
+              } else {
+                ESP_LOGW(TAG, "Unable to parse lifesign message");
+              }
+            } else {
+              ESP_LOGW(TAG, "No Parser for this frame available");
+            }
+          } else {
+            ESP_LOGW(TAG, "Header invalid");
+          }
+        }
+      }
+    } else {
+      ESP_LOGW(TAG, "Unable to get semaphore!");
+      vTaskDelay(pdMS_TO_TICKS(250));
+    }
+
+    vTaskDelay(10);
+  }
+}
+
+// Handle TX
+void tx_worker(void* pvParameters) {
+  while (true) {
+    vTaskDelay(pdMS_TO_TICKS(LIFESIGN_CYCLE));
+    ESP_LOGI(TAG, "Sending lifesign");
+
+    com_waitabort();
+    if (xSemaphoreTake(xSemaCom, pdMS_TO_TICKS(SEMA_TIMEOUT)) == pdTRUE) {
+      com_tx_lifesign_req(); // Send lifesign request
+      xSemaphoreGive(xSemaCom);
+    } else {
+      ESP_LOGW(TAG, "Unable to get semaphore!");
+    }
+  }
+}
 
 /* Public user code ----------------------------------------------------------*/
 
@@ -102,40 +172,27 @@ void app_main(void) {
   ESP_LOGW(TAG, "-------------------------------------");
 
   lcd_init();
-  lcd_settext1("Booting...");
-
+  lcd_settext1("Starting");
   com_init();
 
-  lcd_settext1("Booted!");
+  esp_log_level_set("COM", ESP_LOG_DEBUG);
 
+  vSemaphoreCreateBinary(xSemaCom);
+  configASSERT(xSemaCom);
+
+  devlist_init();
+
+  // Start the RX worker
+  xTaskCreate(rx_worker, "RX", 4096, NULL, tskIDLE_PRIORITY, &xHdlRXWorker);
+  configASSERT(xHdlRXWorker);
+
+  // Start the TX worker
+  xTaskCreate(tx_worker, "TX", 4096, NULL, tskIDLE_PRIORITY, &xHdlTXWorker);
+  configASSERT(xHdlTXWorker);
+
+  lcd_settext1("Running");
   while (1) {
-    static int lifesign_to = 0;
-    uint8_t Rxbuffer[MAX_FRAME_SIZE];
-
-    ESP_LOGW(TAG, "------ LOOP ------");
-
-    // Time for a lifesign request?
-    if (xTaskGetTickCount() >= lifesign_to) {
-      com_tx_lifesign_req(); // Send lifesign request
-      lifesign_to = xTaskGetTickCount() + pdMS_TO_TICKS(LIFESIGN_CYCLE);
-    }
-
-    uint16_t rxlen = com_wait4rx(LIFESIGN_CYCLE, &Rxbuffer[0], MAX_FRAME_SIZE); // Wait for received data (BLOCKING!)
-    if (rxlen > 0) {
-      if (rxlen < sizeof(lora_frameheader_t)) {
-        ESP_LOGW(TAG, "Received size too small");
-      } else {
-        const lora_frameheader_t* pHeader = (lora_frameheader_t*)&Rxbuffer;
-        if (com_checkHeader(pHeader)) {
-          // Lifesign broadcast or response
-          if ((pHeader->ftype == TYPE_ID_RES) || (pHeader->ftype == TYPE_ID_BCAST)) {
-            com_parse_msg_lifesign((lora_id_response_t*)Rxbuffer);
-          } else {
-            ESP_LOGW(TAG, "No Parser for this frame available");
-          }
-        }
-      }
-    }
-    vTaskDelay(10);
+    lcd_settext2("Devices: ", devlist_known());
+    vTaskDelay(1000);
   }
 }

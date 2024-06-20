@@ -21,7 +21,10 @@ extern "C" {
 /* Exported types ------------------------------------------------------------*/
 
 /* Exported constants --------------------------------------------------------*/
+
 #define FRAME_VERSION 1 // Version of the frame protocol
+
+#define DEVTYPE_WPAPER 0x0010 // Device Type: Heltec Wireless Paper
 
 /* Exported macro ------------------------------------------------------------*/
 
@@ -63,7 +66,7 @@ typedef enum __attribute__((packed)) {
 typedef struct __attribute__((packed)) {
   uint8_t version;         // Protocol version number
   lora_frame_type_t ftype; // Type of the frame
-  lora_dev_type_t dtype;   // Device type
+  lora_dev_type_t dtype;   // Generic device type
   lora_command_t cmd;      // Command
   uint16_t payloadlen;     // Length of payload
   uint8_t crc;             // Header-CRC (without payload and CRC)
@@ -74,10 +77,12 @@ typedef struct __attribute__((packed)) {
  */
 typedef struct __attribute__((packed)) {
   lora_frameheader_t header;
-  uint64_t id;    // Unique ID
-  uint8_t vmajor; // Version: Major
-  uint8_t vminor; // Version: Minor
-  uint8_t crc;    // CRC
+  uint64_t id;      // Unique ID
+  uint16_t devtype; // Device Type
+  uint8_t vmajor;   // Version: Major
+  uint8_t vminor;   // Version: Minor
+  uint32_t uptime;  // [s] Uptime
+  uint8_t crc;      // CRC
 } lora_id_response_t;
 
 #ifdef __cplusplus

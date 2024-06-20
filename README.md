@@ -67,9 +67,8 @@ More info about the communication protocol [here](doc/protocol.md)
 - [X] Master: Generic RX for testing
 - [X] Master: Cyclic lifesign request
 - [X] Master: Detections of lifesigns
-- [ ] Master: Keep list of detected devices
-- [ ] Master: Cyclic status requests to known devices
-- [ ] Master: Remove detected devices on status timeouts
+- [X] Master: Keep list of detected devices
+- [X] Master: Remove detected devices on timeouts
 - [ ] Master: WiFi
 - [ ] Master: MQTT connectivity
 - [ ] Master: MQTT list of known devices
@@ -84,7 +83,6 @@ More info about the communication protocol [here](doc/protocol.md)
 - [X] Slave: Generic TX for testing
 - [X] Slave: Lifesign on start
 - [X] Slave: Lifesign on request
-- [ ] Slave: Send status response
 - [ ] Slave: Read endpoint functionality
 - [ ] Slave: Write endpoint functionality
 - [ ] Slave: Display driver

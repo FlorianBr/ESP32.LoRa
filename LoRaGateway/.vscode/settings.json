@@ -13,6 +13,7 @@
         "text_encoding": "c",
         "thread": "c",
         "string.h": "c",
-        "system_error": "c"
+        "system_error": "c",
+        "cstdlib": "c"
     }
 }

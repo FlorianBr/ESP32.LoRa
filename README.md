@@ -73,7 +73,7 @@ More info about the communication protocol [here](doc/protocol.md)
 - [X] Master: MQTT connectivity
 - [X] Master: MQTT list of known devices
 - [X] Master: MQTT device tree with status
-- [ ] Master: NTP Time for all MQTT timestamps
+- [X] Master: NTP Time for all MQTT timestamps
 - [ ] Master: MQTT Read device endpoints
 - [ ] Master: MQTT Write device endpoints
 - [ ] Master: LCD functionality

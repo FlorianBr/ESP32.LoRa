@@ -9,6 +9,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include <cJSON.h>
 #include <stdio.h>
+#include <time.h>
 
 /* Private includes ----------------------------------------------------------*/
 
@@ -22,6 +23,7 @@
 #include "freertos/task.h"
 #include "lcd.h"
 #include "mqtt.h"
+#include "ntp.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 #include "wifi.h"
@@ -123,9 +125,19 @@ void vTimerStatusMsg(TimerHandle_t xTimer) {
   cJSON* message = cJSON_CreateObject();
   if (NULL != message) {
     char* string = NULL;
+    time_t now;
+
+    // Device uptime in seconds
     cJSON_AddNumberToObject(message, "Uptime", (xTaskGetTickCount() * configTICK_RATE_HZ) / 1000);
+
+    // Current time as unix timestamp
+    time(&now);
+    cJSON_AddNumberToObject(message, "Timestamp", now);
+
+    // Number of known devices
     cJSON_AddNumberToObject(message, "NumDevices", devlist_known());
 
+    // Array of device IDs
     cJSON* devices = cJSON_CreateArray();
     if (devices != NULL) {
       cJSON_AddItemToObject(message, "devices", devices);
@@ -137,6 +149,8 @@ void vTimerStatusMsg(TimerHandle_t xTimer) {
         }
       }
     }
+
+    // Convert to string and transmit
     string = cJSON_Print(message);
     MQTT_Transmit("Status", string);
     cJSON_Delete(message);
@@ -150,8 +164,10 @@ void sendDeviceMsg(com_devicedata_t* pDevice) {
     char* string = NULL;
     char cBuffer[50];
     char subtopic[128];
+    time_t now;
 
-    cJSON_AddNumberToObject(message, "Timestamp", (xTaskGetTickCount() * configTICK_RATE_HZ) / 1000);
+    time(&now);
+    cJSON_AddNumberToObject(message, "Timestamp", now);
     cJSON_AddNumberToObject(message, "ID", pDevice->id);
     cJSON_AddNumberToObject(message, "Type", pDevice->type);
     cJSON_AddNumberToObject(message, "Uptime", pDevice->uptime);
@@ -240,9 +256,12 @@ void app_main(void) {
   lcd_init();
   lcd_settext1("Starting");
   com_init();
-  WiFi_Init();
-  // TODO: If WiFi init failed, re-init in AP mode
-  MQTT_Init();
+  if (ESP_OK == WiFi_Init()) {
+    MQTT_Init();
+    NTP_Init();
+  } else {
+    // TODO: If WiFi init failed, re-init in AP mode
+  }
 
   vSemaphoreCreateBinary(xSemaCom);
   configASSERT(xSemaCom);

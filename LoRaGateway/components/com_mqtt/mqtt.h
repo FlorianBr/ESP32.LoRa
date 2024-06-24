@@ -77,6 +77,13 @@ esp_err_t MQTT_Unsubscribe(const char* SubTopic);
  */
 QueueHandle_t* MQTT_GetRxQueue();
 
+/**
+ * @brief Check if MQTT is connected
+ *
+ * @return true if connected to the broker, false otherwise
+ */
+bool MQTT_isConnected();
+
 #ifdef __cplusplus
 }
 #endif

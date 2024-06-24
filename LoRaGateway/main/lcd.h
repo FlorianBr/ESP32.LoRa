@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
+#include <stdbool.h>
 #include <stdint.h>
 
 /* Private includes ----------------------------------------------------------*/
@@ -27,9 +28,9 @@ extern "C" {
 /* Exported functions prototypes ---------------------------------------------*/
 
 void lcd_init();
-void lcd_settext1(const char* pText);
-void lcd_settext2(const char* pText, const uint16_t counter);
-void lcd_settext3(const char* pText, const uint16_t counter);
+void lcd_settext(const uint8_t line, const char* pText);
+
+void lcd_statusbar(const bool wifi, const bool mqtt);
 
 #ifdef __cplusplus
 }

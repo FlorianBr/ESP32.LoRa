@@ -128,7 +128,7 @@ void vTimerStatusMsg(TimerHandle_t xTimer) {
     time_t now;
 
     // Device uptime in seconds
-    cJSON_AddNumberToObject(message, "Uptime", (xTaskGetTickCount() * configTICK_RATE_HZ) / 1000);
+    cJSON_AddNumberToObject(message, "Uptime", (xTaskGetTickCount() * configTICK_RATE_HZ) / 10000);
 
     // Current time as unix timestamp
     time(&now);
@@ -254,7 +254,7 @@ void app_main(void) {
 #endif
 
   lcd_init();
-  lcd_settext1("Starting");
+  lcd_settext(1, "Starting");
   com_init();
   if (ESP_OK == WiFi_Init()) {
     MQTT_Init();
@@ -281,9 +281,45 @@ void app_main(void) {
   configASSERT(timerStatusMsg);
   configASSERT(xTimerStart(timerStatusMsg, 0));
 
-  lcd_settext1("Running");
+  lcd_settext(1, "Running");
   while (1) {
-    lcd_settext2("Devices: ", devlist_known());
-    vTaskDelay(1000);
+#define LINE_SIZE 30
+    static uint8_t known_max = 0;
+    uint8_t known            = 0;
+    known                    = devlist_known();
+    if (known > known_max) {
+      known_max = known;
+    }
+
+    char cBuffer[LINE_SIZE];
+    // Update the displays content
+    // Line 0: WiFi- and MQTT-State
+    lcd_statusbar(WiFi_isConnected(), MQTT_isConnected());
+
+    // Line 1: Currently and max known devices
+    snprintf(&cBuffer[0], LINE_SIZE, "Devices: %d of %d", known, known_max);
+    lcd_settext(3, cBuffer);
+
+    // Line 2:
+    lcd_settext(2, "");
+
+    // Line 3: Uptime
+    uint16_t sec, days, hours;
+
+    sec   = ((xTaskGetTickCount() * configTICK_RATE_HZ) / 10000);
+    hours = sec / 60 / 60;
+    days  = hours / 24;
+    hours = hours - (days * 24);
+
+    snprintf(cBuffer, LINE_SIZE, "Up: %ud %uh (%um)", days, hours, sec / 60);
+    lcd_settext(3, cBuffer);
+
+    // Line 4: Time
+    const time_t now   = time(NULL);
+    struct tm* timeptr = localtime(&now);
+    strftime(cBuffer, LINE_SIZE, "%d.%m.%y %H:%M:%S", timeptr);
+    lcd_settext(4, cBuffer);
+
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }

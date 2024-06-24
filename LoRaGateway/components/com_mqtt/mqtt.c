@@ -218,3 +218,7 @@ esp_err_t MQTT_Unsubscribe(const char* SubTopic) {
 QueueHandle_t* MQTT_GetRxQueue() {
   return (&xRxQueue);
 }
+
+bool MQTT_isConnected() {
+  return isConnected;
+}

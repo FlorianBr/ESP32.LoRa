@@ -25,21 +25,24 @@
 /* Private typedef -----------------------------------------------------------*/
 
 /* Private define ------------------------------------------------------------*/
-#define I2C_BUS_PORT 0                  // I2C port to use
-#define LCD_PIXEL_CLOCK_HZ (400 * 1000) // 400kHz
-#define LCD_NUM_SDA 21                  // SDA Pin number
-#define LCD_NUM_SCL 22                  // SCL  Pin number
-#define LCD_HW_ADDR 0x3C                // LCD address
-#define LCD_H_RES 128                   // Horizontal resolution
-#define LCD_V_RES 64                    // Vertical resolution
-#define LCD_CMD_BITS 8                  // 1 Byte command
-#define LCD_PARAM_BITS 8                // 1 Byte param
+#define I2C_BUS_PORT 0                         // I2C port to use
+#define LCD_PIXEL_CLOCK_HZ (400 * 1000)        // 400kHz
+#define LCD_NUM_SDA 21                         // SDA Pin number
+#define LCD_NUM_SCL 22                         // SCL  Pin number
+#define LCD_HW_ADDR 0x3C                       // LCD address
+#define LCD_H_RES 128                          // Horizontal resolution
+#define LCD_V_RES 64                           // Vertical resolution
+#define LCD_CMD_BITS 8                         // 1 Byte command
+#define LCD_PARAM_BITS 8                       // 1 Byte param
+#define LINE_HEIGHT 12                         // Height of a line in pixels
+#define LINE_MAX_NUM (LCD_V_RES / LINE_HEIGHT) // Max. Number of lines
 
 /* Private macro -------------------------------------------------------------*/
 
 /* Private variables ---------------------------------------------------------*/
 
 static lv_disp_t* display;
+static const char* TAG = "LCD";
 
 /* Private function prototypes -----------------------------------------------*/
 
@@ -104,44 +107,45 @@ void lcd_init() {
   lv_disp_set_rotation(display, LV_DISP_ROT_NONE);
 }
 
-void lcd_settext1(const char* pText) {
-  static lv_obj_t* label = NULL;
+void lcd_settext(const uint8_t line, const char* pText) {
+  static lv_obj_t* label[LINE_MAX_NUM] = {NULL};
+
+  if (line >= LINE_MAX_NUM) {
+    ESP_LOGE(TAG, "Line %d is invalid, max is %d", line, LINE_MAX_NUM);
+    return;
+  }
+
   if (lvgl_port_lock(0)) {
     lv_obj_t* scr = lv_disp_get_scr_act(display);
-    if (NULL == label)
+    if (label[line] == NULL) {
+      label[line] = lv_label_create(scr);
+    }
+    lv_label_set_long_mode(label[line], LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_label_set_text(label[line], pText);
+    lv_obj_set_width(label[line], display->driver->hor_res);
+    lv_obj_align(label[line], LV_ALIGN_TOP_MID, 0, line * LINE_HEIGHT);
+    lv_obj_set_style_text_align(label[line], LV_TEXT_ALIGN_CENTER, 0);
+    lvgl_port_unlock();
+  }
+}
+
+void lcd_statusbar(const bool wifi, const bool mqtt) {
+  lv_obj_t* scr = lv_disp_get_scr_act(display);
+  if (lvgl_port_lock(0)) {
+    char cBuffer[100];
+
+    static lv_obj_t* label = NULL;
+    if (label == NULL) {
       label = lv_label_create(scr);
+    }
     lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_label_set_text(label, pText);
+
+    snprintf(&cBuffer[0], sizeof(cBuffer), "WiFi:%s MQTT:%s", (wifi ? LV_SYMBOL_OK : LV_SYMBOL_CLOSE),
+             (mqtt ? LV_SYMBOL_OK : LV_SYMBOL_CLOSE));
+    lv_label_set_text(label, cBuffer);
     lv_obj_set_width(label, display->driver->hor_res);
     lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 0);
-    lvgl_port_unlock();
-  }
-}
-
-void lcd_settext2(const char* pText, const uint16_t counter) {
-  static lv_obj_t* label = NULL;
-  if (lvgl_port_lock(0)) {
-    lv_obj_t* scr = lv_disp_get_scr_act(display);
-    if (NULL == label)
-      label = lv_label_create(scr);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_label_set_text_fmt(label, "%s %d", pText, counter);
-    lv_obj_set_width(label, display->driver->hor_res);
-    lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 12);
-    lvgl_port_unlock();
-  }
-}
-
-void lcd_settext3(const char* pText, const uint16_t counter) {
-  static lv_obj_t* label = NULL;
-  if (lvgl_port_lock(0)) {
-    lv_obj_t* scr = lv_disp_get_scr_act(display);
-    if (NULL == label)
-      label = lv_label_create(scr);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_label_set_text_fmt(label, "%s %d", pText, counter);
-    lv_obj_set_width(label, display->driver->hor_res);
-    lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 24);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lvgl_port_unlock();
   }
 }

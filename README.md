@@ -74,8 +74,8 @@ More info about the communication protocol [here](doc/protocol.md)
 - [X] Master: MQTT list of known devices
 - [X] Master: MQTT device tree with status
 - [X] Master: NTP Time for all MQTT timestamps
-- [ ] Master: MQTT Read device endpoints
-- [ ] Master: MQTT Write device endpoints
+- [X] Master: MQTT Access data endpoints (Request to LoRa)
+- [ ] Master: MQTT Access data endpoints (Response to MQTT)
 - [X] Master: LCD functionality
 - [X] Master: LCD show WiFi connectivity
 - [X] Master: LCD show MQTT connectivity

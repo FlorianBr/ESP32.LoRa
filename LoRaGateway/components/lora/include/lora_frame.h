@@ -22,7 +22,8 @@ extern "C" {
 
 /* Exported constants --------------------------------------------------------*/
 
-#define FRAME_VERSION 1 // Version of the frame protocol
+#define FRAME_VERSION 1   // Version of the frame protocol
+#define LORA_MAX_SIZE 256 // Max. size for transmissions
 
 #define DEVTYPE_WPAPER 0x0010 // Device Type: Heltec Wireless Paper
 
@@ -55,8 +56,7 @@ typedef enum __attribute__((packed)) {
 typedef enum __attribute__((packed)) {
   DEV_CMD_NONE     = 0,  // None/unused
   DEV_CMD_LIFESIGN = 1,  // Lifesign
-  DEV_CMD_RDATA    = 10, // Data Read
-  DEV_CMD_WDATA    = 20, // Data Write
+  DEV_CMD_DATAACC  = 10, // Data Access
   DEV_CMD_STATUS   = 30, // Status
 } lora_command_t;
 
@@ -84,6 +84,15 @@ typedef struct __attribute__((packed)) {
   uint32_t uptime;  // [s] Uptime
   uint8_t crc;      // CRC
 } lora_id_response_t;
+
+/**
+ * @brief A LoRa data read/write request/response
+ */
+typedef struct __attribute__((packed)) {
+  lora_frameheader_t header;
+  uint8_t endpoint; // The data endpoint to access
+  uint8_t cmd;      // The command for the endpoint
+} lora_data_access_t;
 
 #ifdef __cplusplus
 }

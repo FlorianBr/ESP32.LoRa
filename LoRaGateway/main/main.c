@@ -113,7 +113,7 @@ void rx_worker(void* pvParameters) {
   }
 }
 
-// Handle LoRa TX
+// Handle LoRa Lifesign TX
 void tx_worker(void* pvParameters) {
   vTaskDelay(pdMS_TO_TICKS(1000)); // 1s start-up delay
   while (true) {
@@ -140,13 +140,27 @@ void rx_worker_mqtt(void* pvParameters) {
 
   while (1) {
     MQTT_RXMessage RxMsg;
+    uint64_t dest_id = 0;
 
     if (rxQueue == NULL) {
       rxQueue = MQTT_GetRxQueue();
     }
 
     if (xQueueReceive(rxQueue, &RxMsg, portMAX_DELAY) == pdPASS) {
-      ESP_LOGD(TAG, "MQTT Message received on topic '%s': '%s'", RxMsg.SubTopic, RxMsg.Payload);
+      ESP_LOGI(TAG, "MQTT Message received on topic '%s': '%s'", RxMsg.SubTopic, RxMsg.Payload);
+
+      if (strstr(RxMsg.SubTopic, "cmd") == NULL) {
+        ESP_LOGE(TAG, "Not the command topic!");
+        break;
+      }
+
+      char* pSep;
+      pSep = strchr(RxMsg.SubTopic, '/');
+      if (NULL == pSep) {
+        ESP_LOGE(TAG, "Unexpected topic structure!");
+        break;
+      }
+      dest_id = strtoll(RxMsg.SubTopic, &pSep, 10);
 
       cJSON* json = cJSON_Parse(RxMsg.Payload);
       if ((NULL != json) && (json->type != cJSON_Invalid)) {
@@ -155,12 +169,20 @@ void rx_worker_mqtt(void* pvParameters) {
         const cJSON* payload = cJSON_GetObjectItem(json, "payload");
 
         if (cJSON_IsNumber(cmd) && cJSON_IsNumber(endp)) {
-          const uint8_t command  = (uint8_t)cJSON_GetNumberValue(cmd);
-          const uint8_t endpoint = (uint8_t)cJSON_GetNumberValue(endp);
-          ESP_LOGI(TAG, "Received 0x%02x for endpoint %d", command, endpoint);
-
-          com_tx_cmd(command, endpoint, strlen(cJSON_GetStringValue(payload)), cJSON_GetStringValue(payload));
-
+          uint8_t payloadsize = 0;
+          char* pPayload      = NULL;
+          if (NULL != payload) {
+            pPayload    = cJSON_GetStringValue(payload);
+            payloadsize = strlen(pPayload);
+          }
+          com_waitabort();
+          if (xSemaphoreTake(xSemaCom, pdMS_TO_TICKS(SEMA_TIMEOUT)) == pdTRUE) {
+            com_tx_cmd(dest_id, (uint8_t)cJSON_GetNumberValue(cmd), (uint8_t)cJSON_GetNumberValue(endp), payloadsize,
+                       pPayload);
+            xSemaphoreGive(xSemaCom);
+          } else {
+            ESP_LOGW(TAG, "Unable to get semaphore!");
+          }
         } else {
           ESP_LOGW(TAG, "Invalid command or endpoint!");
         }
@@ -254,7 +276,7 @@ void sendDeviceMsg(com_devicedata_t* pDevice) {
     cJSON_AddNumberToObject(message, "Uptime", pDevice->uptime);
     snprintf(&cBuffer[0], 50, "%d.%d", pDevice->vmaj, pDevice->vmin);
     cJSON_AddStringToObject(message, "Version", cBuffer);
-    snprintf(&subtopic[0], 128, "%lld/info", pDevice->id);
+    snprintf(&subtopic[0], 128, "%llu/info", pDevice->id);
     string = cJSON_Print(message);
     MQTT_Transmit(subtopic, string);
     if (NULL != message)

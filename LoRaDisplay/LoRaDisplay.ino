@@ -243,11 +243,8 @@ void lora_OnRxDone(uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr) {
       ESP_LOGI(TAG, "Delaying %d ms", delaytime);
       vTaskDelay(pdMS_TO_TICKS(delaytime));
       lora_tx_id_frame(true);
-    } else if (pHeader->cmd == DEV_CMD_RDATA) {
-      ESP_LOGI(TAG, "Read Data request received");
-      // TODO: Implement me!
-    } else if (pHeader->cmd == DEV_CMD_WDATA) {
-      ESP_LOGI(TAG, "Write Data request received");
+    } else if (pHeader->cmd == DEV_CMD_DATAACC) {
+      ESP_LOGI(TAG, "Data Access request received");
       // TODO: Implement me!
     } else if (pHeader->cmd == DEV_CMD_STATUS) {
       ESP_LOGI(TAG, "Status request received");

@@ -37,14 +37,8 @@ System ID:
 |---------|-------------|---------------|---------------|-----------|--------|
 | 7 Byte  | 2 Byte      | 1 Byte        | 1 Byte        | 4 Byte    | 1 Byte |
 
-### Data Read Request
+### Data Access
 
-| Header  | Endpoint Nr. |
-|---------|--------------|
-| 7 Byte  | 1 Byte       |
-
-### Data Read Respone
-
-| Header  | Endpoint Nr. | Data      |
-|---------|--------------|-----------|
-| 7 Byte  | 1 Byte       | 0..x Byte |
+| Header  | Endpoint Nr. | Command |  Data      |
+|---------|--------------|---------|------------|
+| 7 Byte  | 1 Byte       | 1 Byte  | 0..x Byte  |

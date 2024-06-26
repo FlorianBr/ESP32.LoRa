@@ -20,6 +20,9 @@
         "string": "c",
         "chrono": "c",
         "typeindex": "c",
-        "typeinfo": "c"
+        "typeinfo": "c",
+        "sstream": "c",
+        "any": "c",
+        "complex": "c"
     }
 }

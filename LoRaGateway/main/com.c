@@ -112,11 +112,8 @@ bool com_checkHeader(const lora_frameheader_t* pHeader) {
     case DEV_CMD_LIFESIGN:
       ESP_LOGD(TAG, "      Command = %d (Lifesign)", pHeader->cmd);
       break;
-    case DEV_CMD_RDATA:
+    case DEV_CMD_DATAACC:
       ESP_LOGD(TAG, "      Command = %d (Read Data)", pHeader->cmd);
-      break;
-    case DEV_CMD_WDATA:
-      ESP_LOGD(TAG, "      Command = %d (Write Data)", pHeader->cmd);
       break;
     default:
       ESP_LOGW(TAG, "      Command = %d (Unknown)", pHeader->cmd);
@@ -156,6 +153,7 @@ bool com_parse_msg_lifesign(const lora_id_response_t* res, com_devicedata_t* pDv
   ESP_LOGD(TAG, "   Version = %d.%d", res->vmajor, res->vminor);
   ESP_LOGD(TAG, "    Uptime = %ld", res->uptime);
 
+  pDvData->id     = res->header.id;
   pDvData->type   = res->devtype;
   pDvData->uptime = res->uptime;
   pDvData->vmaj   = res->vmajor;
@@ -178,7 +176,6 @@ bool com_tx_lifesign_req() {
 
   lora_set_tx_power(2);
   lora_send_packet((uint8_t*)&frame, sizeof(lora_frameheader_t));
-
   ESP_LOGD(TAG, "Transmitted Lifesign Request, %d packets lost", lora_packet_lost());
 
   return true;
@@ -213,7 +210,41 @@ void com_waitabort() {
   abort_wait = true;
 }
 
-bool com_tx_cmd(const uint8_t cmd, const uint8_t endpoint, const uint8_t payloadsize, const char* payload) {
-  ESP_LOGI(TAG, "Transmitting Command 0x%x to Endpoint %d", cmd, endpoint);
+bool com_tx_cmd(const uint64_t id, const uint8_t cmd, const uint8_t endpoint, const uint8_t payloadsize,
+                const char* payload) {
+  lora_data_access_t* pFrame;
+  char txbuffer[LORA_MAX_SIZE];
+  size_t txlength = 0;
+
+  ESP_LOGI(TAG, "Transmitting Command 0x%x to Endpoint %d for 0x%llx", cmd, endpoint, id);
+
+  pFrame = (lora_data_access_t*)&txbuffer[0];
+
+  pFrame->header.version    = FRAME_VERSION;
+  pFrame->header.ftype      = TYPE_ID_REQ;
+  pFrame->header.dtype      = DEV_TYPE_GATEWAY;
+  pFrame->header.cmd        = DEV_CMD_DATAACC;
+  pFrame->header.id         = id;
+  pFrame->header.payloadlen = (sizeof(lora_data_access_t) - sizeof(lora_frameheader_t)) + payloadsize;
+  pFrame->header.crc        = crc8((uint8_t*)pFrame, sizeof(lora_frameheader_t) - 1);
+  pFrame->endpoint          = endpoint;
+  pFrame->cmd               = cmd;
+
+  txlength = sizeof(lora_data_access_t);
+
+  if ((payloadsize > 0) && (NULL != payload)) {
+    ESP_LOGI(TAG, "Transmitting additional %d byte of payload", payloadsize);
+    memcpy(&txbuffer[txlength], payload, payloadsize);
+    txlength += payloadsize;
+  }
+
+  if (txlength > LORA_MAX_SIZE) {
+    ESP_LOGE(TAG, "Transmission size too big!");
+    return false;
+  } else {
+    lora_set_tx_power(2);
+    lora_send_packet((uint8_t*)&txbuffer[0], txlength);
+    ESP_LOGI(TAG, "Transmitted Command Frame with %d byte, %d packets lost", txlength, lora_packet_lost());
+  }
   return true;
 }

@@ -9,6 +9,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include <cJSON.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 
 /* Private includes ----------------------------------------------------------*/
@@ -88,9 +89,9 @@ void rx_worker(void* pvParameters) {
                 (pHeader->ftype == TYPE_ID_BCAST)) { // Lifesign broadcast
               com_devicedata_t DevData;
               if (com_parse_msg_lifesign((const lora_id_response_t*)Rxbuffer, &DevData)) {
-                if (devlist_adddevice(DevData.id)) {
+                if (devlist_adddevice(pHeader->id)) {
                   sendDeviceMsg(&DevData);
-                  ESP_LOGI(TAG, "Received Lifesign of device 0x%llx", DevData.id);
+                  ESP_LOGI(TAG, "Received Lifesign of device 0x%llx", pHeader->id);
                 }
               } else {
                 ESP_LOGW(TAG, "Unable to parse lifesign message");
@@ -153,9 +154,13 @@ void rx_worker_mqtt(void* pvParameters) {
         const cJSON* endp    = cJSON_GetObjectItem(json, "endpoint");
         const cJSON* payload = cJSON_GetObjectItem(json, "payload");
 
-        if (cJSON_IsString(cmd) && cJSON_IsNumber(endp)) {
-          ESP_LOGI(TAG, "Received '%s' for endpoint %d", cJSON_GetStringValue(cmd),
-                   (uint8_t)cJSON_GetNumberValue(endp));
+        if (cJSON_IsNumber(cmd) && cJSON_IsNumber(endp)) {
+          const uint8_t command  = (uint8_t)cJSON_GetNumberValue(cmd);
+          const uint8_t endpoint = (uint8_t)cJSON_GetNumberValue(endp);
+          ESP_LOGI(TAG, "Received 0x%02x for endpoint %d", command, endpoint);
+
+          com_tx_cmd(command, endpoint, strlen(cJSON_GetStringValue(payload)), cJSON_GetStringValue(payload));
+
         } else {
           ESP_LOGW(TAG, "Invalid command or endpoint!");
         }

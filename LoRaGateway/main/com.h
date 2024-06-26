@@ -66,6 +66,17 @@ bool com_parse_msg_lifesign(const lora_id_response_t* res, com_devicedata_t* pDv
 bool com_tx_lifesign_req();
 
 /**
+ * @brief Transmits a command to a endpoint
+ *
+ * @param cmd The command
+ * @param endpoint Endpoint number
+ * @param payloadsize Size of the payload
+ * @param payload Pointer to the payload
+ * @return true if transmitted
+ */
+bool com_tx_cmd(const uint8_t cmd, const uint8_t endpoint, const uint8_t payloadsize, const char* payload);
+
+/**
  * @brief Wait for received data with timeout
  *
  * @param timeout Timeout in ms or 0 for no timeout

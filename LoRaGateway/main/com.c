@@ -125,6 +125,12 @@ bool com_checkHeader(const lora_frameheader_t* pHeader) {
   }
   ESP_LOGD(TAG, "   Payloadlen = %d", pHeader->payloadlen);
 
+  // ID 0 is ignored
+  if (pHeader->id == 0) {
+    return false;
+  }
+  ESP_LOGD(TAG, "   SystemID = 0x%llx", pHeader->id);
+
   // TODO: Check CRC
   ESP_LOGD(TAG, "   Header CRC = %d", pHeader->crc);
 
@@ -146,12 +152,10 @@ bool com_parse_msg_lifesign(const lora_id_response_t* res, com_devicedata_t* pDv
 
   // TODO: Check CRC
 
-  ESP_LOGD(TAG, "        ID = %llx", res->id);
   ESP_LOGD(TAG, "      Type = %x", res->devtype);
   ESP_LOGD(TAG, "   Version = %d.%d", res->vmajor, res->vminor);
   ESP_LOGD(TAG, "    Uptime = %ld", res->uptime);
 
-  pDvData->id     = res->id;
   pDvData->type   = res->devtype;
   pDvData->uptime = res->uptime;
   pDvData->vmaj   = res->vmajor;
@@ -168,6 +172,7 @@ bool com_tx_lifesign_req() {
   frame.ftype      = TYPE_ID_REQ;
   frame.dtype      = DEV_TYPE_GATEWAY;
   frame.cmd        = DEV_CMD_LIFESIGN;
+  frame.id         = 0;
   frame.payloadlen = 0;
   frame.crc        = crc8((uint8_t*)&frame, sizeof(lora_frameheader_t) - 1);
 
@@ -206,4 +211,9 @@ uint16_t com_wait4rx(uint32_t timeout, uint8_t* buffer, const uint16_t maxsize) 
 
 void com_waitabort() {
   abort_wait = true;
+}
+
+bool com_tx_cmd(const uint8_t cmd, const uint8_t endpoint, const uint8_t payloadsize, const char* payload) {
+  ESP_LOGI(TAG, "Transmitting Command 0x%x to Endpoint %d", cmd, endpoint);
+  return true;
 }

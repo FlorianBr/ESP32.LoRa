@@ -145,9 +145,9 @@ bool lora_tx_id_frame(const bool wasRequested) {
   framedata.header.ftype      = (wasRequested ? TYPE_ID_RES : TYPE_ID_BCAST);
   framedata.header.dtype      = DEV_TYPE_ENDDEV;
   framedata.header.cmd        = DEV_CMD_LIFESIGN;
+  framedata.header.id         = systemId;
   framedata.header.payloadlen = sizeof(lora_id_response_t) - sizeof(lora_frameheader_t);
   framedata.header.crc        = 0xFF;
-  framedata.id                = systemId;
   framedata.devtype           = DEVTYPE_WPAPER;
   framedata.vmajor            = VERSION_MAJOR;
   framedata.vminor            = VERSION_MINOR;

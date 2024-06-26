@@ -4,9 +4,9 @@
 
 ### Frame Header
 
-| Version | Frame Type | Device Type | Command   | Payload length | CRC    |
-|---------|------------|-------------|-----------|----------------|--------|
-| 1 Byte  | 1 Byte     | 1 Byte      | 1 Byte    | 2 Byte         | 1 Byte |
+| Version | Frame Type | Device Type | Command   | System ID | Payload length | CRC    |
+|---------|------------|-------------|-----------|-----------|----------------|--------|
+| 1 Byte  | 1 Byte     | 1 Byte      | 1 Byte    | 8 Byte    | 2 Byte         | 1 Byte |
 
 Frame Types:
 
@@ -28,8 +28,23 @@ Commands:
 - 10 ... Data Read
 - 20 ... Data Write
 
+System ID:
+0 for broadcasts, otherwise destination ID
+
 ### ID Response/Broadcast
 
-| Header  | System ID | Device Type | Version Major | Version Minor | Uptime    | CRC    |
-|---------|-----------|-------------|---------------|---------------|-----------|--------|
-| 7 Byte  | 8 Byte    | 2 Byte      | 1 Byte        | 1 Byte        | 4 Byte    | 1 Byte |
+| Header  | Device Type | Version Major | Version Minor | Uptime    | CRC    |
+|---------|-------------|---------------|---------------|-----------|--------|
+| 7 Byte  | 2 Byte      | 1 Byte        | 1 Byte        | 4 Byte    | 1 Byte |
+
+### Data Read Request
+
+| Header  | Endpoint Nr. |
+|---------|--------------|
+| 7 Byte  | 1 Byte       |
+
+### Data Read Respone
+
+| Header  | Endpoint Nr. | Data      |
+|---------|--------------|-----------|
+| 7 Byte  | 1 Byte       | 0..x Byte |

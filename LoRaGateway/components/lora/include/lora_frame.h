@@ -68,6 +68,7 @@ typedef struct __attribute__((packed)) {
   lora_frame_type_t ftype; // Type of the frame
   lora_dev_type_t dtype;   // Generic device type
   lora_command_t cmd;      // Command
+  uint64_t id;             // Unique ID
   uint16_t payloadlen;     // Length of payload
   uint8_t crc;             // Header-CRC (without payload and CRC)
 } lora_frameheader_t;
@@ -77,7 +78,6 @@ typedef struct __attribute__((packed)) {
  */
 typedef struct __attribute__((packed)) {
   lora_frameheader_t header;
-  uint64_t id;      // Unique ID
   uint16_t devtype; // Device Type
   uint8_t vmajor;   // Version: Major
   uint8_t vminor;   // Version: Minor

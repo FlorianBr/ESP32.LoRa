@@ -73,9 +73,9 @@ esp_err_t MQTT_Unsubscribe(const char* SubTopic);
 /**
  * @brief Get the handle to the RX queue
  *
- * @return QueueHandle_t*
+ * @return QueueHandle_t
  */
-QueueHandle_t* MQTT_GetRxQueue();
+QueueHandle_t MQTT_GetRxQueue();
 
 /**
  * @brief Check if MQTT is connected

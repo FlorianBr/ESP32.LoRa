@@ -36,6 +36,7 @@
 #define MAX_FRAME_SIZE 512         // Max. Size of frame we can handle
 #define SEMA_TIMEOUT 1000          // [ms] Timeout when waiting for semaphores
 #define STATUS_CYCLE (60 * 1000)   // [ms] Cycle time for status messages
+#define LINE_SIZE 30               // Max. Size of one display line
 
 /* Private macro -------------------------------------------------------------*/
 
@@ -45,8 +46,10 @@ static const char* TAG = "MAIN";
 static esp_partition_t* part_info;
 static esp_ota_img_states_t ota_state;
 
-TaskHandle_t xHdlRXWorker = NULL;
-TaskHandle_t xHdlTXWorker = NULL;
+TaskHandle_t xHdlRXWorker     = NULL;
+TaskHandle_t xHdlTXWorker     = NULL;
+TaskHandle_t xHdlRXWorkerMQTT = NULL;
+TaskHandle_t xHdlLCDWorker    = NULL;
 
 SemaphoreHandle_t xSemaCom = NULL; // Semaphore for communication resource
 
@@ -54,12 +57,18 @@ SemaphoreHandle_t xSemaCom = NULL; // Semaphore for communication resource
 
 void rx_worker(void* pvParameters);
 void tx_worker(void* pvParameters);
+void rx_worker_mqtt(void* pvParameters);
+void rx_worker_lcd(void* pvParameters);
+
 void vTimerStatusMsg(TimerHandle_t xTimer);
 void sendDeviceMsg(com_devicedata_t* pDevice);
 
+void dev_added(uint64_t id);
+void dev_removed(uint64_t id);
+
 /* Private user code ---------------------------------------------------------*/
 
-// Handle RX
+// Handle LoRa RX
 void rx_worker(void* pvParameters) {
   uint8_t Rxbuffer[MAX_FRAME_SIZE];
 
@@ -69,7 +78,7 @@ void rx_worker(void* pvParameters) {
       xSemaphoreGive(xSemaCom);
 
       if (rxlen > 0) {
-        ESP_LOGI(TAG, "Received %d byte", rxlen);
+        ESP_LOGI(TAG, "Received %d byte(s) from LoRa", rxlen);
         if (rxlen < sizeof(lora_frameheader_t)) {
           ESP_LOGW(TAG, "Received size too small");
         } else {
@@ -81,6 +90,7 @@ void rx_worker(void* pvParameters) {
               if (com_parse_msg_lifesign((const lora_id_response_t*)Rxbuffer, &DevData)) {
                 if (devlist_adddevice(DevData.id)) {
                   sendDeviceMsg(&DevData);
+                  ESP_LOGI(TAG, "Received Lifesign of device 0x%llx", DevData.id);
                 }
               } else {
                 ESP_LOGW(TAG, "Unable to parse lifesign message");
@@ -102,7 +112,7 @@ void rx_worker(void* pvParameters) {
   }
 }
 
-// Handle TX
+// Handle LoRa TX
 void tx_worker(void* pvParameters) {
   vTaskDelay(pdMS_TO_TICKS(1000)); // 1s start-up delay
   while (true) {
@@ -117,6 +127,68 @@ void tx_worker(void* pvParameters) {
     }
 
     vTaskDelay(pdMS_TO_TICKS(LIFESIGN_CYCLE));
+  }
+}
+
+// Handle MQTT RX
+void rx_worker_mqtt(void* pvParameters) {
+  QueueHandle_t rxQueue = NULL; // The MQTT RX Queue
+
+  const device_cbs_t cb = {.del_cd = &dev_removed, .new_cb = &dev_added};
+  devlist_setcbs(cb);
+
+  while (1) {
+    MQTT_RXMessage RxMsg;
+
+    if (rxQueue == NULL) {
+      rxQueue = MQTT_GetRxQueue();
+    }
+
+    if (xQueueReceive(rxQueue, &RxMsg, portMAX_DELAY) == pdPASS) {
+      ESP_LOGD(TAG, "MQTT Message received on topic '%s': '%s'", RxMsg.SubTopic, RxMsg.Payload);
+
+      cJSON* json = cJSON_Parse(RxMsg.Payload);
+      if ((NULL != json) && (json->type != cJSON_Invalid)) {
+        const cJSON* cmd     = cJSON_GetObjectItem(json, "cmd");
+        const cJSON* endp    = cJSON_GetObjectItem(json, "endpoint");
+        const cJSON* payload = cJSON_GetObjectItem(json, "payload");
+
+        if (cJSON_IsString(cmd) && cJSON_IsNumber(endp)) {
+          ESP_LOGI(TAG, "Received '%s' for endpoint %d", cJSON_GetStringValue(cmd),
+                   (uint8_t)cJSON_GetNumberValue(endp));
+        } else {
+          ESP_LOGW(TAG, "Invalid command or endpoint!");
+        }
+      } else {
+        ESP_LOGW(TAG, "Message is not valid JSON!");
+      }
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(1000));
+  }
+}
+
+// Callback-Function for a added device
+void dev_added(uint64_t id) {
+  char subtopic[128];
+  snprintf(&subtopic[0], 128, "%lld/cmd", id);
+
+  if (ESP_OK != MQTT_Subscribe(&subtopic[0])) {
+    ESP_LOGE(TAG, "Subscribing to topic '%s' FAILED", subtopic);
+  } else {
+    ESP_LOGI(TAG, "Subscribed to topic '%s'", subtopic);
+  }
+}
+
+// Callback-Function for a removed device
+void dev_removed(uint64_t id) {
+  char subtopic[128];
+  snprintf(&subtopic[0], 128, "%lld/cmd", id);
+
+  if (ESP_OK != MQTT_Unsubscribe(&subtopic[0])) {
+    ESP_LOGE(TAG, "Unubscribing to topic '%s' FAILED", subtopic);
+  } else {
+    ESP_LOGI(TAG, "Unubscribed to topic '%s'", subtopic);
   }
 }
 
@@ -153,7 +225,11 @@ void vTimerStatusMsg(TimerHandle_t xTimer) {
     // Convert to string and transmit
     string = cJSON_Print(message);
     MQTT_Transmit("Status", string);
-    cJSON_Delete(message);
+
+    if (NULL != message)
+      cJSON_Delete(message);
+    if (NULL != string)
+      free(string);
   }
 }
 
@@ -176,8 +252,59 @@ void sendDeviceMsg(com_devicedata_t* pDevice) {
     snprintf(&subtopic[0], 128, "%lld/info", pDevice->id);
     string = cJSON_Print(message);
     MQTT_Transmit(subtopic, string);
-    cJSON_Delete(message);
+    if (NULL != message)
+      cJSON_Delete(message);
+    if (NULL != string)
+      free(string);
   }
+}
+
+// Cyclic display update
+void rx_worker_lcd(void* pvParameters) {
+  while (1) {
+    static time_t lastnow = 0;
+    const time_t now      = time(NULL);
+
+    if (now != lastnow) {
+      char cBuffer[LINE_SIZE];
+
+      lastnow = now;
+
+      static uint8_t known_max = 0;
+      const uint8_t known      = devlist_known();
+
+      if (known > known_max) {
+        known_max = known;
+      }
+      // Update the displays content
+      // Line 0: WiFi- and MQTT-State
+      lcd_statusbar(WiFi_isConnected(), MQTT_isConnected());
+
+      // Line 1: Currently and max known devices
+      snprintf(&cBuffer[0], LINE_SIZE, "Devices: %d of %d", known, known_max);
+      lcd_settext(1, cBuffer);
+
+      // Line 2: Empty
+      lcd_settext(2, "");
+
+      // Line 3: Uptime
+      const uint16_t sec  = ((xTaskGetTickCount() * configTICK_RATE_HZ) / 10000);
+      uint16_t hours      = sec / 60 / 60;
+      const uint16_t days = hours / 24;
+
+      hours = hours - (days * 24);
+
+      snprintf(cBuffer, LINE_SIZE, "Up: %ud %uh (%um)", days, hours, sec / 60);
+      lcd_settext(3, cBuffer);
+
+      // Line 4: Time
+      struct tm* timeptr = localtime(&now);
+      strftime(cBuffer, LINE_SIZE, "%d.%m.%y %H:%M:%S", timeptr);
+      lcd_settext(4, cBuffer);
+    }
+  }
+
+  vTaskDelay(pdMS_TO_TICKS(125));
 }
 
 /* Public user code ----------------------------------------------------------*/
@@ -268,11 +395,11 @@ void app_main(void) {
 
   devlist_init();
 
-  // Start the RX worker
+  // Start the LoRa RX worker
   xTaskCreate(rx_worker, "RX", 4096, NULL, tskIDLE_PRIORITY, &xHdlRXWorker);
   configASSERT(xHdlRXWorker);
 
-  // Start the TX worker
+  // Start the LoRa TX worker
   xTaskCreate(tx_worker, "TX", 4096, NULL, tskIDLE_PRIORITY, &xHdlTXWorker);
   configASSERT(xHdlTXWorker);
 
@@ -281,45 +408,16 @@ void app_main(void) {
   configASSERT(timerStatusMsg);
   configASSERT(xTimerStart(timerStatusMsg, 0));
 
+  // Start the MQTT RX worker
+  xTaskCreate(rx_worker_mqtt, "MQTT-RX", 4096, NULL, tskIDLE_PRIORITY, &xHdlRXWorkerMQTT);
+  configASSERT(xHdlRXWorkerMQTT);
+
+  // Start the LCD updater
+  xTaskCreate(rx_worker_lcd, "LCD", 4096, NULL, tskIDLE_PRIORITY, &xHdlLCDWorker);
+  configASSERT(xHdlLCDWorker);
+
   lcd_settext(1, "Running");
   while (1) {
-#define LINE_SIZE 30
-    static uint8_t known_max = 0;
-    uint8_t known            = 0;
-    known                    = devlist_known();
-    if (known > known_max) {
-      known_max = known;
-    }
-
-    char cBuffer[LINE_SIZE];
-    // Update the displays content
-    // Line 0: WiFi- and MQTT-State
-    lcd_statusbar(WiFi_isConnected(), MQTT_isConnected());
-
-    // Line 1: Currently and max known devices
-    snprintf(&cBuffer[0], LINE_SIZE, "Devices: %d of %d", known, known_max);
-    lcd_settext(3, cBuffer);
-
-    // Line 2:
-    lcd_settext(2, "");
-
-    // Line 3: Uptime
-    uint16_t sec, days, hours;
-
-    sec   = ((xTaskGetTickCount() * configTICK_RATE_HZ) / 10000);
-    hours = sec / 60 / 60;
-    days  = hours / 24;
-    hours = hours - (days * 24);
-
-    snprintf(cBuffer, LINE_SIZE, "Up: %ud %uh (%um)", days, hours, sec / 60);
-    lcd_settext(3, cBuffer);
-
-    // Line 4: Time
-    const time_t now   = time(NULL);
-    struct tm* timeptr = localtime(&now);
-    strftime(cBuffer, LINE_SIZE, "%d.%m.%y %H:%M:%S", timeptr);
-    lcd_settext(4, cBuffer);
-
     vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }

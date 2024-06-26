@@ -13,6 +13,7 @@
 #include "sdkconfig.h"
 
 /* Private includes ----------------------------------------------------------*/
+
 #include "devicelist.h"
 
 /* Private typedef -----------------------------------------------------------*/
@@ -34,6 +35,7 @@ typedef struct {
 
 TaskHandle_t xHdlDevListWorker = NULL;
 static devicelist_entry_t devicelist[MAX_DEVICELIST];
+static device_cbs_t callbacks;
 
 static const char* TAG = "DLST";
 
@@ -50,6 +52,10 @@ int dlCompare(const void* a, const void* b) {
 // Sets a entry to defaults
 void clearEntry(size_t entry) {
   if (entry < MAX_DEVICELIST) {
+    if (NULL != callbacks.del_cd) {
+      callbacks.del_cd(devicelist[entry].id);
+    }
+
     devicelist[entry].id        = 0;
     devicelist[entry].timestamp = 0;
     devicelist[entry].isAlive   = false;
@@ -64,7 +70,7 @@ void worker(void* pvParameters) {
     for (size_t i = 0; i < MAX_DEVICELIST; i++) {
       // Seen too long ago?
       if (devicelist[i].isAlive && (xTaskGetTickCount() - devicelist[i].timestamp > pdMS_TO_TICKS(DEV_FORGET_TIME))) {
-        ESP_LOGI(TAG, "Forgetting device %d with ID %llx", i, devicelist[i].id);
+        ESP_LOGD(TAG, "Forgetting device %d with ID %llx", i, devicelist[i].id);
         clearEntry(i);
       }
     }
@@ -72,12 +78,12 @@ void worker(void* pvParameters) {
     qsort(devicelist, MAX_DEVICELIST, sizeof(devicelist_entry_t), dlCompare);
 
     // Display list of devices
-    ESP_LOGI(TAG, "Known Devices:%d", devlist_known());
+    ESP_LOGD(TAG, "Known Devices:%d", devlist_known());
     for (size_t i = 0; i < MAX_DEVICELIST; i++) {
       if (devicelist[i].isAlive) {
         int seen = xTaskGetTickCount() - devicelist[i].timestamp;
         seen     = seen * configTICK_RATE_HZ; // Tick to ms
-        ESP_LOGI(TAG, "   %02d %llx %d", i, devicelist[i].id, (seen / 1000));
+        ESP_LOGD(TAG, "   %02d %llx %d", i, devicelist[i].id, (seen / 1000));
       }
     }
   }
@@ -116,7 +122,11 @@ bool devlist_adddevice(const uint64_t id) {
   devicelist[dlpos].id        = id;
   devicelist[dlpos].isAlive   = true;
   devicelist[dlpos].timestamp = xTaskGetTickCount();
-  ESP_LOGI(TAG, "Device %llx %s", id, (newDevice ? "added" : "updated"));
+  ESP_LOGD(TAG, "Device %llx %s", id, (newDevice ? "added" : "updated"));
+
+  if (newDevice && (NULL != callbacks.new_cb)) {
+    callbacks.new_cb(id);
+  }
 
   qsort(devicelist, MAX_DEVICELIST, sizeof(devicelist_entry_t), dlCompare);
 
@@ -152,4 +162,8 @@ bool devlist_getEntryId(const uint8_t entry, uint64_t* Id) {
     }
   }
   return false;
+}
+
+void devlist_setcbs(const device_cbs_t cbs) {
+  callbacks = cbs;
 }

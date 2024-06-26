@@ -20,6 +20,15 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 
+// Callback for new or removed devices
+typedef void (*dev_cb_t)(const uint64_t id);
+
+// The callbacks for new or deleted devices
+typedef struct {
+  dev_cb_t new_cb;
+  dev_cb_t del_cd;
+} device_cbs_t;
+
 /* Exported constants --------------------------------------------------------*/
 
 /* Exported macro ------------------------------------------------------------*/
@@ -55,6 +64,13 @@ uint8_t devlist_known();
  * @return true if valid, false otherwise
  */
 bool devlist_getEntryId(const uint8_t entry, uint64_t* Id);
+
+/**
+ * @brief Set the callbacks when a device is added or deleted from the list
+ *
+ * @param cbs The callback structure
+ */
+void devlist_setcbs(const device_cbs_t cbs);
 
 #ifdef __cplusplus
 }

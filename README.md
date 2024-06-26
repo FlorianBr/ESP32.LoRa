@@ -76,10 +76,10 @@ More info about the communication protocol [here](doc/protocol.md)
 - [X] Master: NTP Time for all MQTT timestamps
 - [ ] Master: MQTT Read device endpoints
 - [ ] Master: MQTT Write device endpoints
-- [ ] Master: LCD functionality
-- [ ] Master: LCD show WiFi connectivity
-- [ ] Master: LCD show MQTT connectivity
-- [ ] Master: LCD show number of known devices
+- [X] Master: LCD functionality
+- [X] Master: LCD show WiFi connectivity
+- [X] Master: LCD show MQTT connectivity
+- [X] Master: LCD show number of known devices
 - [ ] Master: OTA Update
 - [X] Slave: Generic RX for testing
 - [X] Slave: Generic TX for testing

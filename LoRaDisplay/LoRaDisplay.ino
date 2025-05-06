@@ -19,8 +19,6 @@
 // #include <HT_SH1107Wire.h>
 // #include <HT_SSD1306Spi.h>
 // #include <HT_SSD1306Wire.h>
-// #include <HT_TinyGPS++.h>
-// #include <HT_lCMEN2R13EFC1.h>
 // #include <HT_st7735.h>
 // #include <HT_st7735_fonts.h>
 // #include <HT_st7736.h>
@@ -28,6 +26,9 @@
 // #include <esp_clk_internal.h>
 // #include <heltec.h>
 #include <esp32-hal-log.h>
+#include <libb64/cdecode.h>
+
+#include "HT_lCMEN2R13EFC1.h"
 
 /* Private includes ----------------------------------------------------------*/
 
@@ -77,7 +78,11 @@ static const char* TAG = "MAIN";
 static RadioEvents_t RadioEvents;          // Possible events of the LoRa radio
 static uint64_t systemId          = 0;     // Unique system ID
 static TaskHandle_t LoRaWorkerHdl = NULL;  // Handle to the RX/TX worker task
+static TaskHandle_t DispWorkerHdl = NULL;  // Handle to the EINK/Display  worker task
 volatile bool lora_idle           = false; // LoRa Transceiver semaphore TODO: Make atomic
+
+HT_ICMEN2R13EFC1 display(6, 5, 4, 7, 3, 2, -1, 6000000); // rst,dc,cs,busy,sck,mosi,miso,frequency
+const uint8_t WiFi_Logo_bits[10000] PROGMEM = {0xAF};
 
 /* Private function prototypes -----------------------------------------------*/
 
@@ -87,9 +92,12 @@ void lora_OnTxTimeout(void);
 void lora_OnRxTimeout(void);
 void lora_OnRxError(void);
 void lora_init();
-void lora_Worker(void* pvParameters);
+void lora_Worker(void* pvParams);
+void disp_Worker(void* pvParams);
 bool lora_tx_id_frame(const bool wasRequested);
 uint8_t crc8(const uint8_t* data, const size_t len);
+bool lora_parse_dacc(const uint8_t cmd, const uint8_t endp, const uint16_t len, const char* payload);
+void VExt_Ctrl(bool TurnOn);
 
 /* Private user code ---------------------------------------------------------*/
 
@@ -197,6 +205,22 @@ void lora_OnRxError() {
   lora_idle = true;
 }
 
+// Parse a received data access request
+bool lora_parse_dacc(const uint8_t cmd, const uint8_t endp, const uint16_t len, const char* payload) {
+  char payloadbuf[LORA_MAX_SIZE];
+
+  ESP_LOGI(TAG, "Data Access request received");
+  ESP_LOGI(TAG, "           Cmd: %d", cmd);
+  ESP_LOGI(TAG, "      Endpoint: %d", endp);
+  ESP_LOGI(TAG, " Payload (enc): %d Bytes: '%s'", len, payload);
+
+  int length = base64_decode_chars(payload, len, &payloadbuf[0]);
+
+  ESP_LOGI(TAG, " Payload (dec): %d Bytes: '%s'", length, payloadbuf);
+
+  return true;
+}
+
 // LoRa Callback: RX
 void lora_OnRxDone(uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr) {
   Radio.Sleep();
@@ -217,13 +241,11 @@ void lora_OnRxDone(uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr) {
     ESP_LOGW(TAG, "Device to Device communication not supported ");
     return;
   }
-#if 0 // TODO: Enable CRC check
   uint8_t crc = crc8((uint8_t*)pHeader, sizeof(lora_frameheader_t) - 1);
   if (pHeader->crc != crc) {
     ESP_LOGE(TAG, "CRC error, expected %x but got %x", crc, pHeader->crc);
     return;
   }
-#endif
 
   ESP_LOGI(TAG, "Received Header:");
   ESP_LOGI(TAG, "   Version: %d", pHeader->version);
@@ -244,8 +266,16 @@ void lora_OnRxDone(uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr) {
       vTaskDelay(pdMS_TO_TICKS(delaytime));
       lora_tx_id_frame(true);
     } else if (pHeader->cmd == DEV_CMD_DATAACC) {
-      ESP_LOGI(TAG, "Data Access request received");
-      // TODO: Implement me!
+      const lora_data_access_t* pDAcc = (lora_data_access_t*)payload;
+      const uint16_t len = pDAcc->header.payloadlen - (sizeof(lora_data_access_t) - sizeof(lora_frameheader_t));
+      char* pPayload     = NULL;
+
+      if (len > 0) {
+        pPayload = (char*)pDAcc + sizeof(lora_data_access_t);
+      }
+
+      lora_parse_dacc(pDAcc->cmd, pDAcc->endpoint, len, pPayload);
+
     } else if (pHeader->cmd == DEV_CMD_STATUS) {
       ESP_LOGI(TAG, "Status request received");
       // TODO: Implement me!
@@ -258,7 +288,7 @@ void lora_OnRxDone(uint8_t* payload, uint16_t size, int16_t rssi, int8_t snr) {
 }
 
 // Task for LoRa RX/TX
-void lora_Worker(void* pvParameters) {
+void lora_Worker(void* pvParams) {
   uint32_t runtime = LORA_ID_CYCLE; // Trigger a RX right at the start
   ESP_LOGI(TAG, "LoRa Worker started");
   while (1) {
@@ -286,6 +316,42 @@ void lora_Worker(void* pvParameters) {
   }
 }
 
+void disp_Worker(void* pvParams) {
+  // VExt_Ctrl(true);
+
+  HT_ICMEN2R13EFC1 display(6, 5, 4, 7, 3, 2,
+                           -1,     // miso
+                           6000000 // freq
+  );                               // rst,dc,cs,busy,sck,mosi,miso,frequency
+
+  pinMode(45, OUTPUT);
+  digitalWrite(45, LOW);
+  vTaskDelay(pdMS_TO_TICKS(100));
+
+  ESP_LOGI(TAG, "Display Init returned 0x%02x", display.init());
+  ESP_LOGI(TAG, "Display connect returned 0x%02x", display.connect());
+
+  while (1) {
+    pinMode(18, OUTPUT);
+    digitalWrite(18, LOW);
+
+    // ESP_LOGI(TAG, "Display Clear (Black)...");
+    // display.clear();
+
+    // #define WiFi_Logo_width 250
+    // #define WiFi_Logo_height 122
+
+    // display.drawXbm(0, 0, WiFi_Logo_width, WiFi_Logo_height, WiFi_Logo_bits);
+
+    // display.update(BLACK_BUFFER);
+    // display.display();
+
+    // pinMode(18, OUTPUT);
+    // digitalWrite(18, HIGH);
+
+    vTaskDelay(pdMS_TO_TICKS(1000)); // 5s delay
+  }
+}
 /* Public user code ----------------------------------------------------------*/
 
 // Arduino SETUP
@@ -302,9 +368,18 @@ void setup() {
 
   xTaskCreate(lora_Worker, "LoRa", 4096, NULL, tskIDLE_PRIORITY, &LoRaWorkerHdl);
   configASSERT(LoRaWorkerHdl);
+
+  // xTaskCreate(disp_Worker, "EINK", 4096, NULL, tskIDLE_PRIORITY, &DispWorkerHdl);
+  // configASSERT(DispWorkerHdl);
 }
 
 // Arduino LOOP
 void loop() {
   vTaskDelay(500 / portTICK_PERIOD_MS);
+}
+
+// Turn VExt ON or OFF
+void VExt_Ctrl(bool TurnOn) {
+  pinMode(45, OUTPUT);
+  digitalWrite(45, !TurnOn); // Low active!
 }

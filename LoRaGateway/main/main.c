@@ -38,6 +38,8 @@
 #define SEMA_TIMEOUT 1000          // [ms] Timeout when waiting for semaphores
 #define STATUS_CYCLE (60 * 1000)   // [ms] Cycle time for status messages
 #define LINE_SIZE 30               // Max. Size of one display line
+#define OSSTATS_ARRAY_SIZE_OFFS 5  // OS-Statistics: Increase this if print_real_time_stats returns ESP_ERR_INVALID_SIZE
+#define OSSTATS_TIME 30000         // [ms] OS-Statistics cycle time
 
 /* Private macro -------------------------------------------------------------*/
 
@@ -47,11 +49,6 @@ static const char* TAG = "MAIN";
 static esp_partition_t* part_info;
 static esp_ota_img_states_t ota_state;
 
-TaskHandle_t xHdlRXWorker     = NULL;
-TaskHandle_t xHdlTXWorker     = NULL;
-TaskHandle_t xHdlRXWorkerMQTT = NULL;
-TaskHandle_t xHdlLCDWorker    = NULL;
-
 SemaphoreHandle_t xSemaCom = NULL; // Semaphore for communication resource
 
 /* Private function prototypes -----------------------------------------------*/
@@ -60,6 +57,7 @@ void rx_worker(void* pvParameters);
 void tx_worker(void* pvParameters);
 void rx_worker_mqtt(void* pvParameters);
 void rx_worker_lcd(void* pvParameters);
+void TaskOSStats(void* pvParameters);
 
 void vTimerStatusMsg(TimerHandle_t xTimer);
 void sendDeviceMsg(com_devicedata_t* pDevice);
@@ -334,6 +332,154 @@ void rx_worker_lcd(void* pvParameters) {
   vTaskDelay(pdMS_TO_TICKS(125));
 }
 
+// OS Statistics
+void TaskOSStats(void* pvParameters) {
+  while (1) {
+    TaskStatus_t *start_array = NULL, *end_array = NULL;
+    UBaseType_t start_array_size, end_array_size;
+    uint32_t start_run_time, end_run_time;
+
+    // Allocate array to store current task states
+    start_array_size = uxTaskGetNumberOfTasks() + OSSTATS_ARRAY_SIZE_OFFS;
+    start_array      = malloc(sizeof(TaskStatus_t) * start_array_size);
+    if (start_array == NULL) {
+      ESP_LOGE(TAG, "OSStats: Out of memory!\r\n");
+      goto exit;
+    }
+
+    // Get current task states
+    start_array_size = uxTaskGetSystemState(start_array, start_array_size, &start_run_time);
+    if (start_array_size == 0) {
+      ESP_LOGE(TAG, "OSStats: Invalid size!\r\n");
+      goto exit;
+    }
+
+    vTaskDelay(OSSTATS_TIME / portTICK_PERIOD_MS);
+
+    // Allocate array to store tasks states post delay
+    end_array_size = uxTaskGetNumberOfTasks() + OSSTATS_ARRAY_SIZE_OFFS;
+    end_array      = malloc(sizeof(TaskStatus_t) * end_array_size);
+    if (end_array == NULL) {
+      ESP_LOGE(TAG, "OSStats: Out of memory!\r\n");
+      goto exit;
+    }
+
+    // Get post delay task states
+    end_array_size = uxTaskGetSystemState(end_array, end_array_size, &end_run_time);
+    if (end_array_size == 0) {
+      ESP_LOGE(TAG, "OSStats: Invalid size!\r\n");
+      goto exit;
+    }
+
+    // Calculate total_elapsed_time in units of run time stats clock period.
+    uint32_t total_elapsed_time = (end_run_time - start_run_time);
+    if (total_elapsed_time == 0) {
+      ESP_LOGE(TAG, "OSStats: Invalid state!\r\n");
+      goto exit;
+    }
+
+    printf("+-------------------------------------------------------------------+\n");
+    printf("| Task              |   Run Time  | Percentage | State |      Stack |\n");
+    printf("+-------------------------------------------------------------------+\n");
+    // Match each task in start_array to those in the end_array
+    for (int i = 0; i < start_array_size; i++) {
+      int k = -1;
+      for (int j = 0; j < end_array_size; j++) {
+        if (start_array[i].xHandle == end_array[j].xHandle) {
+          k = j;
+          // Mark that task have been matched by overwriting their handles
+          start_array[i].xHandle = NULL;
+          end_array[j].xHandle   = NULL;
+          break;
+        }
+      }
+      // Check if matching task found
+      if (k >= 0) {
+        char OutputLine[80];
+        char charbuffer[20];
+
+        uint32_t task_elapsed_time = end_array[k].ulRunTimeCounter - start_array[i].ulRunTimeCounter;
+        uint32_t percentage_time   = (task_elapsed_time * 100UL) / (total_elapsed_time * portNUM_PROCESSORS);
+
+        memset(&OutputLine[0], ' ', sizeof(OutputLine));
+
+        // Task Name
+        OutputLine[0] = '|';
+        memcpy(&OutputLine[2], start_array[i].pcTaskName, strlen(start_array[i].pcTaskName));
+
+        // Time (absolute)
+        snprintf(&charbuffer[0], sizeof(charbuffer), "| %10lu", task_elapsed_time);
+        memcpy(&OutputLine[20], &charbuffer[0], strlen(charbuffer));
+
+        // Time (percentage)
+        snprintf(&charbuffer[0], sizeof(charbuffer), "| %5lu", percentage_time);
+        memcpy(&OutputLine[34], &charbuffer[0], strlen(charbuffer));
+
+        // Task State
+        OutputLine[47] = '|';
+        switch (start_array[i].eCurrentState) {
+          case eRunning:
+            memcpy(&OutputLine[49], "Run", 3);
+            break;
+          case eReady:
+            memcpy(&OutputLine[49], "Rdy", 3);
+            break;
+          case eBlocked:
+            memcpy(&OutputLine[49], "Blk", 3);
+            break;
+          case eSuspended:
+            memcpy(&OutputLine[49], "Sus", 3);
+            break;
+          case eDeleted:
+            memcpy(&OutputLine[49], "Del", 3);
+            break;
+          default:
+            memcpy(&OutputLine[49], "Ukn", 3);
+            break;
+        } // switch
+
+        // Stack Usage
+        snprintf(&charbuffer[0], sizeof(charbuffer), "| %10lu", start_array[i].usStackHighWaterMark);
+        memcpy(&OutputLine[55], &charbuffer[0], strlen(charbuffer));
+
+        OutputLine[68] = '|';
+        OutputLine[69] = '\n';
+        OutputLine[70] = '\0';
+
+        printf(&OutputLine[0]);
+      }
+    } // for
+
+    // Print unmatched tasks
+    for (int i = 0; i < start_array_size; i++) {
+      if (start_array[i].xHandle != NULL) {
+        printf("| %s Deleted\n", start_array[i].pcTaskName);
+      }
+    }
+    for (int i = 0; i < end_array_size; i++) {
+      if (end_array[i].xHandle != NULL) {
+        printf("| %s Created\n", end_array[i].pcTaskName);
+      }
+    }
+#if 1
+    printf("+-------------------------------------------------------------------+\n");
+
+    printf("| HEAP           Free    MinFree     MaxBlk\n");
+    printf("| All      %10d %10d %10d\n", heap_caps_get_free_size(MALLOC_CAP_8BIT),
+           heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT), heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+
+    printf("| Internal %10d %10d %10d\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+           heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    printf("| SPI      %10d %10d %10d\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+           heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM), heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+    printf("+-------------------------------------------------------------------+\n\n");
+#endif
+  exit: // Common return path
+    free(start_array);
+    free(end_array);
+  } // while (1)
+} // TaskOSStats()
+
 /* Public user code ----------------------------------------------------------*/
 
 void app_main(void) {
@@ -423,12 +569,10 @@ void app_main(void) {
   devlist_init();
 
   // Start the LoRa RX worker
-  xTaskCreate(rx_worker, "RX", 4096, NULL, tskIDLE_PRIORITY, &xHdlRXWorker);
-  configASSERT(xHdlRXWorker);
+  xTaskCreate(rx_worker, "RX", 4096, NULL, tskIDLE_PRIORITY, NULL);
 
   // Start the LoRa TX worker
-  xTaskCreate(tx_worker, "TX", 4096, NULL, tskIDLE_PRIORITY, &xHdlTXWorker);
-  configASSERT(xHdlTXWorker);
+  xTaskCreate(tx_worker, "TX", 4096, NULL, tskIDLE_PRIORITY, NULL);
 
   // Timer for cyclic messages
   TimerHandle_t timerStatusMsg = xTimerCreate("StatusMsg", pdMS_TO_TICKS(STATUS_CYCLE), pdTRUE, NULL, vTimerStatusMsg);
@@ -436,15 +580,16 @@ void app_main(void) {
   configASSERT(xTimerStart(timerStatusMsg, 0));
 
   // Start the MQTT RX worker
-  xTaskCreate(rx_worker_mqtt, "MQTT-RX", 4096, NULL, tskIDLE_PRIORITY, &xHdlRXWorkerMQTT);
-  configASSERT(xHdlRXWorkerMQTT);
+  xTaskCreate(rx_worker_mqtt, "MQTT-RX", 4096, NULL, tskIDLE_PRIORITY, NULL);
 
   // Start the LCD updater
-  xTaskCreate(rx_worker_lcd, "LCD", 4096, NULL, tskIDLE_PRIORITY, &xHdlLCDWorker);
-  configASSERT(xHdlLCDWorker);
+  xTaskCreate(rx_worker_lcd, "LCD", 4096, NULL, tskIDLE_PRIORITY, NULL);
+
+  // OS Statistics
+  xTaskCreate(TaskOSStats, "FreeRTOS Stats", 4096, NULL, tskIDLE_PRIORITY, NULL);
 
   lcd_settext(1, "Running");
   while (1) {
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(5000));
   }
 }

@@ -14,6 +14,7 @@ Frame Types:
 - 10 ... Request
 - 20 ... Response
 - 30 ... Broadcast
+- 40 ... Notification
 
 Device Type:
 
@@ -25,8 +26,8 @@ Commands:
 
 - 0 ... None
 - 1 ... Lifesign
-- 10 ... Data Read
-- 20 ... Data Write
+- 10 ... Data Access
+- 30 ... Status
 
 System ID:
 0 for broadcasts, otherwise destination ID
@@ -42,3 +43,5 @@ System ID:
 | Header  | Endpoint Nr. | Command |  Data      |
 |---------|--------------|---------|------------|
 | 7 Byte  | 1 Byte       | 1 Byte  | 0..x Byte  |
+
+The optional data is Base64 encoded binary data

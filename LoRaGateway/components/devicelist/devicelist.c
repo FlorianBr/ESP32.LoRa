@@ -140,7 +140,7 @@ void devlist_init() {
   }
 
   // Start the DeviceList worker
-  xTaskCreate(worker, "DevList", 2048, NULL, tskIDLE_PRIORITY, &xHdlDevListWorker);
+  xTaskCreate(worker, "DevList", 4096, NULL, tskIDLE_PRIORITY, &xHdlDevListWorker);
   configASSERT(xHdlDevListWorker);
 }
 
